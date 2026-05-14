@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'createdAt'])
+        && data.uid == request.auth.uid
+        && data.email == request.auth.token.email
+        && data.displayName is string && data.displayName.size() <= 100
+        && data.bio is string && data.bio.size() <= 1000
+        && data.education is string && data.education.size() <= 200
+        && data.experience is string && data.experience.size() <= 200
+        && data.competitionCount is int && data.competitionCount >= 0
+        && data.createdAt == request.time;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['text', 'senderId', 'receiverId', 'createdAt'])
+        && data.senderId == request.auth.uid
+        && data.receiverId is string && isValidId(data.receiverId)
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 5000
+        && data.createdAt == request.time;
+    }
+
+    // Collection: Users
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn(); // We need list to find teammates
+      
+      allow create: if isOwner(userId) && isValidUserProfile(incoming());
+      
+      allow update: if isOwner(userId) 
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'skills', 'education', 'experience', 'competitionCount', 'bio'])
+        );
+    }
+
+    // Collection: Chats and Messages
+    match /chats/{chatId} {
+      allow get: if isSignedIn(); // Basic access to chat parent if needed
+      
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+        allow create: if isSignedIn() && isValidChatMessage(incoming()) && isValidId(messageId);
+      }
+    }
+  }
+}

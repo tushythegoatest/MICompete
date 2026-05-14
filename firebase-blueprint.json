@@ -1,0 +1,79 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User information for B-school students",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoURL": { "type": "string" },
+        "skills": { "type": "array", "items": { "type": "string" } },
+        "degree": { "type": "string" },
+        "collegeName": { "type": "string" },
+        "experienceYears": { "type": "integer" },
+        "companyName": { "type": "string" },
+        "role": { "type": "string" },
+        "competitionCount": { "type": "integer" },
+        "bio": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "email", "createdAt", "degree", "collegeName", "experienceYears", "competitionCount", "bio", "skills"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "Message between two users",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["text", "senderId", "receiverId", "createdAt"]
+    },
+    "Endorsement": {
+      "title": "Skill Endorsement",
+      "description": "Endorsement of a user's skill by another user",
+      "type": "object",
+      "properties": {
+        "endorserId": { "type": "string" },
+        "endorseeId": { "type": "string" },
+        "skill": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["endorserId", "endorseeId", "skill", "createdAt"]
+    },
+    "MessageRequest": {
+      "title": "Message Request",
+      "description": "Request to connect/message",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "receiverId", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Student profiles"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Messaging history"
+    },
+    "/endorsements/{endorsementId}": {
+      "schema": "Endorsement",
+      "description": "Skill Endorsements"
+    },
+    "/messageRequests/{requestId}": {
+      "schema": "MessageRequest",
+      "description": "Requests to connect"
+    }
+  }
+}

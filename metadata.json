@@ -1,0 +1,6 @@
+{
+  "name": "MICompete",
+  "description": "Find the perfect teammate for B-school case competitions. Create your profile, search for ongoing competitions on Unstop and Mettl, and chat with potential partners in real-time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

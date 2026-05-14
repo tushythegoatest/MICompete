@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'createdAt', 'degree', 'collegeName', 'experienceYears', 'competitionCount', 'bio', 'skills'])
+        && data.uid == request.auth.uid
+        && data.email == request.auth.token.email
+        && data.displayName is string && data.displayName.size() <= 100 && data.displayName.size() >= 0
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2000))
+        && (!('gender' in data) || (data.gender is string && data.gender.size() <= 50))
+        && (!('darkMode' in data) || (data.darkMode is bool))
+        && data.bio is string && data.bio.size() <= 2000
+        && data.degree is string && data.degree.size() <= 1000
+        && data.collegeName is string && data.collegeName.size() <= 1000
+        && data.experienceYears is number && data.experienceYears >= 0 && data.experienceYears <= 15
+        && (!('companyName' in data) || (data.companyName is string && data.companyName.size() <= 1000))
+        && (!('role' in data) || (data.role is string && data.role.size() <= 1000))
+        && (!('workExperiences' in data) || (data.workExperiences is list && data.workExperiences.size() <= 5))
+        && data.competitionCount is number && data.competitionCount >= 0
+        && data.skills is list && data.skills.size() <= 50
+        && data.createdAt == request.time;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll(['text', 'senderId', 'receiverId', 'createdAt'])
+        && data.senderId == request.auth.uid
+        && data.receiverId is string && isValidId(data.receiverId)
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.createdAt == request.time;
+    }
+
+    function isValidEndorsement(data) {
+      return data.keys().hasAll(['endorserId', 'endorseeId', 'skill', 'createdAt'])
+        && data.endorserId == request.auth.uid
+        && data.endorseeId is string && isValidId(data.endorseeId)
+        && data.skill is string && data.skill.size() > 0 && data.skill.size() <= 50
+        && data.createdAt == request.time;
+    }
+
+    // Collection: Users
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId);
+      allow list: if isSignedIn(); // Users need to find each other to partner up.
+      
+      allow create: if isOwner(userId) && isValidUserProfile(incoming()) && isValidId(userId);
+      
+      allow update: if isOwner(userId) 
+        && isValidId(userId)
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'collegeName', 'experienceYears', 'companyName', 'role', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email'])
+        );
+    }
+
+    // Collection: Chats and Messages
+    match /chats/{chatId} {
+      allow get: if isSignedIn() && isValidId(chatId);
+      
+      match /messages/{messageId} {
+        allow list: if isSignedIn() 
+          && isValidId(chatId)
+          && chatId.matches('.*' + request.auth.uid + '.*');
+          
+        allow get: if isSignedIn() 
+          && isValidId(chatId)
+          && isValidId(messageId)
+          && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+        
+        allow create: if isSignedIn() 
+          && isValidId(chatId)
+          && isValidId(messageId)
+          && isValidChatMessage(incoming());
+      }
+    }
+
+    // Collection: Endorsements
+    match /endorsements/{endorsementId} {
+      allow get: if isSignedIn() && isValidId(endorsementId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(endorsementId) && incoming().endorserId == request.auth.uid && incoming().keys().hasAll(['endorserId', 'endorseeId', 'skill', 'createdAt']) && incoming().size() == 4;
+      allow delete: if isSignedIn() && isValidId(endorsementId) && resource.data.endorserId == request.auth.uid;
+    }
+
+    // Collection: Message Requests
+    match /messageRequests/{requestId} {
+      allow read: if isSignedIn() && isValidId(requestId) && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow create: if isSignedIn() && isValidId(requestId) 
+        && incoming().senderId == request.auth.uid 
+        && incoming().keys().hasAll(['senderId', 'receiverId', 'status', 'createdAt'])
+        && incoming().size() == 4
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time;
+      allow update: if isSignedIn() && isValidId(requestId)
+        && (
+           // receiver can accept or reject
+           (existing().receiverId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status']) && (incoming().status == 'accepted' || incoming().status == 'rejected'))
+        );
+    }
+  }
+}
