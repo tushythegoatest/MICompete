@@ -549,8 +549,8 @@ export default function App() {
                                <Trophy className="text-red-400" />
                              </div>
                              <div>
-                               <div className="font-bold text-white text-xl">{competitions.length > 0 ? competitions.length : 15}+ events</div>
-                               <div className="text-sm text-slate-300">are ready to be disrupted</div>
+                               <div className="font-bold text-slate-900 dark:text-white text-xl">{competitions.length > 0 ? competitions.length : 15}+ events</div>
+                               <div className="text-sm text-slate-700 dark:text-slate-300">are ready to be disrupted</div>
                              </div>
                            </div>
                          </div>
@@ -662,8 +662,8 @@ export default function App() {
                                  <Trophy className="text-red-400" />
                                </div>
                                <div>
-                                 <div className="font-bold text-white text-xl">{competitions.length > 0 ? competitions.length : 15}+ events</div>
-                                 <div className="text-sm text-slate-300">are ready to be disrupted</div>
+                                 <div className="font-bold text-slate-900 dark:text-white text-xl">{competitions.length > 0 ? competitions.length : 15}+ events</div>
+                                 <div className="text-sm text-slate-700 dark:text-slate-300">are ready to be disrupted</div>
                                </div>
                              </div>
                            </div>
@@ -1293,7 +1293,7 @@ export default function App() {
               {/* Contacts Sidebar */}
               <div className="w-80 border-r border-slate-200 dark:border-slate-800 hidden md:block">
                  <div className="p-6 border-b border-slate-200 dark:border-slate-800">
-                    <h3 className="font-bold text-slate-900 dark:text-slate-50">Connections & Requests</h3>
+                    <h3 className="font-bold text-black dark:text-slate-50">Connections & Requests</h3>
                  </div>
                  <div className="overflow-y-auto h-full pb-16">
                     {allTeammates.filter(t => {
@@ -1309,12 +1309,12 @@ export default function App() {
                         className={`w-full p-4 flex items-center justify-between gap-3 hover:bg-slate-50 dark:bg-[#18181b] transition-colors ${selectedPartner?.uid === t.uid ? 'bg-slate-100 dark:bg-[#27272a] border-r-2 border-red-500' : ''}`}
                       >
                          <div className="flex items-center gap-3">
-                           <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 overflow-hidden shrink-0 text-xs flex items-center justify-center font-bold text-slate-900 dark:text-slate-50">
+                           <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 overflow-hidden shrink-0 text-xs flex items-center justify-center font-bold text-black dark:text-slate-50">
                              {t.photoURL ? <img src={t.photoURL} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : formatNameForPrivacy(currentUser?.uid, t.uid, t.displayName)?.[0]}
                            </div>
                            <div className="text-left">
-                              <div className="font-bold text-sm text-slate-900 dark:text-slate-50">{formatNameForPrivacy(currentUser?.uid, t.uid, t.displayName)}</div>
-                              <div className="text-xs text-slate-700 dark:text-slate-300 truncate w-32">{t.degree || 'Fresher'}</div>
+                              <div className="font-bold text-sm text-black dark:text-slate-50">{formatNameForPrivacy(currentUser?.uid, t.uid, t.displayName)}</div>
+                              <div className="text-xs text-black dark:text-slate-300 truncate w-32">{t.degree || 'Fresher'}</div>
                            </div>
                          </div>
                          {getRequestStatus(t.uid)?.status === 'pending' && !getRequestStatus(t.uid)?.isSender && (
@@ -1345,12 +1345,12 @@ export default function App() {
                           >
                             <ChevronRight className="w-5 h-5 rotate-180" />
                           </button>
-                          <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 overflow-hidden flex items-center justify-center font-bold text-xs text-slate-900 dark:text-slate-50">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 overflow-hidden flex items-center justify-center font-bold text-xs text-black dark:text-slate-50">
                             {selectedPartner.photoURL ? <img src={selectedPartner.photoURL} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : formatNameForPrivacy(currentUser?.uid, selectedPartner.uid, selectedPartner.displayName)?.[0]}
                           </div>
                           <div className="flex flex-col">
-                            <div className="font-bold text-sm text-slate-900 dark:text-slate-50">{formatNameForPrivacy(currentUser?.uid, selectedPartner.uid, selectedPartner.displayName)}</div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">{selectedPartner.degree || 'Fresher'}</div>
+                            <div className="font-bold text-sm text-black dark:text-slate-50">{formatNameForPrivacy(currentUser?.uid, selectedPartner.uid, selectedPartner.displayName)}</div>
+                            <div className="text-xs text-black dark:text-slate-400">{selectedPartner.degree || 'Fresher'}</div>
                           </div>
                         </div>
                         <button onClick={() => openProfileModal(selectedPartner)} className="p-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50">
@@ -1392,7 +1392,7 @@ export default function App() {
                              <>
                                {chatMessages.map((msg) => (
                                  <div key={msg.id} className={`flex ${msg.senderId === currentUser?.uid ? 'justify-end' : 'justify-start'}`}>
-                                   <div className={`${msg.senderId === currentUser?.uid ? 'bg-red-600 text-white rounded-tr-none shadow-sm' : 'bg-slate-100 dark:bg-[#27272a] text-slate-900 dark:text-slate-50 border border-slate-200 dark:border-slate-800 rounded-tl-none shadow-sm'} p-4 rounded-2xl max-w-[80%] text-sm`}>
+                                   <div className={`${msg.senderId === currentUser?.uid ? 'bg-red-600 text-white rounded-tr-none shadow-sm' : 'bg-slate-100 dark:bg-[#27272a] text-black dark:text-slate-50 border border-slate-200 dark:border-slate-800 rounded-tl-none shadow-sm'} p-4 rounded-2xl max-w-[80%] text-sm`}>
                                        {msg.text}
                                    </div>
                                  </div>
