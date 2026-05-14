@@ -13,6 +13,7 @@ export interface UserProfile {
   photoURL?: string;
   skills: string[];
   degree: string;
+  ugDegree?: string;
   collegeName: string;
   experienceYears: number;
   companyName?: string;

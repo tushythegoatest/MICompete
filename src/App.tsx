@@ -96,6 +96,7 @@ export default function App() {
     photoURL: '',
     gender: '',
     degree: '',
+    ugDegree: '',
     collegeName: '',
     experienceYears: 0,
     companyName: '',
@@ -123,6 +124,7 @@ export default function App() {
             photoURL: profile.photoURL || user.photoURL || '',
             gender: profile.gender || '',
             degree: profile.degree || '',
+            ugDegree: profile.ugDegree || '',
             collegeName: profile.collegeName || '',
             experienceYears: profile.experienceYears || 0,
             companyName: profile.companyName || '',
@@ -222,10 +224,22 @@ export default function App() {
         // Fallback locally
         setCompetitions([
           {
-            title: "Indian Case Challenge 2026",
+            title: "Indian Case Challenge 2026 (ICC - Case Study Competition)",
             organization: "Business Club, IIT Kharagpur",
             date: "Jan 05, 2026",
-            url: "https://unstop.com/"
+            url: "https://unstop.com/p/indian-case-challenge-2026-icc-case-study-competition-iit-kharagpur-900593"
+          },
+          {
+            title: "Uncharted: Case-Study Competition - 2026",
+            organization: "Unstop",
+            date: "Mar 30, 2026",
+            url: "https://unstop.com/p/uncharted-case-study-competition-901174"
+          },
+          {
+            title: "STRAITS - An International Crisis Management Case Competition - 2026",
+            organization: "Indian Institute of Management (IIM), Ahmedabad - Dubai",
+            date: "May 07, 2026",
+            url: "https://unstop.com/p/straits-an-international-crisis-management-case-competition-iim-ahmedabad-dubai-901046"
           }
         ]);
       }
@@ -233,10 +247,22 @@ export default function App() {
       console.error(err);
       setCompetitions([
         {
-          title: "Indian Case Challenge 2026",
+          title: "Indian Case Challenge 2026 (ICC - Case Study Competition)",
           organization: "Business Club, IIT Kharagpur",
           date: "Jan 05, 2026",
-          url: "https://unstop.com/"
+          url: "https://unstop.com/p/indian-case-challenge-2026-icc-case-study-competition-iit-kharagpur-900593"
+        },
+        {
+          title: "Uncharted: Case-Study Competition - 2026",
+          organization: "Unstop",
+          date: "Mar 30, 2026",
+          url: "https://unstop.com/p/uncharted-case-study-competition-901174"
+        },
+        {
+          title: "STRAITS - An International Crisis Management Case Competition - 2026",
+          organization: "Indian Institute of Management (IIM), Ahmedabad - Dubai",
+          date: "May 07, 2026",
+          url: "https://unstop.com/p/straits-an-international-crisis-management-case-competition-iim-ahmedabad-dubai-901046"
         }
       ]);
     } finally {
@@ -250,6 +276,7 @@ export default function App() {
     if (
       !profileForm.displayName.trim() ||
       !profileForm.degree.trim() ||
+      !profileForm.ugDegree.trim() ||
       !profileForm.collegeName.trim() ||
       profileForm.experienceYears === undefined ||
       !profileForm.skills.trim() ||
@@ -279,6 +306,7 @@ export default function App() {
       gender: profileForm.gender || undefined,
       skills: profileForm.skills.split(',').map(s => s.trim()).filter(Boolean),
       degree: profileForm.degree,
+      ugDegree: profileForm.ugDegree,
       collegeName: profileForm.collegeName,
       experienceYears: profileForm.experienceYears,
       companyName: profileForm.experienceYears > 0 ? profileForm.companyName : undefined,
@@ -350,7 +378,7 @@ export default function App() {
   const getFilteredTeammates = () => {
     return allTeammates.filter(tm => {
       if (filterSkill && !tm.skills?.some(s => s.toLowerCase().includes(filterSkill.toLowerCase()))) return false;
-      if (filterExperience && ![tm.degree, tm.collegeName, tm.companyName, tm.role].some(field => field?.toLowerCase().includes(filterExperience.toLowerCase()))) return false;
+      if (filterExperience && ![tm.degree, tm.ugDegree, tm.collegeName, tm.companyName, tm.role].some(field => field?.toLowerCase().includes(filterExperience.toLowerCase()))) return false;
       if (filterMinComps && (tm.competitionCount || 0) < parseInt(filterMinComps)) return false;
       return true;
     }).sort((a, b) => {
@@ -379,11 +407,13 @@ export default function App() {
     }
   };
 
+  const hasUnreadRequests = messageRequests.some(req => !req.isSender && req.status === 'pending');
+
   const navItems = [
     ...(currentUser ? [
       { id: 'competitions', label: 'Compete', icon: Trophy },
       { id: 'teammates', label: 'Connect', icon: Network },
-      { id: 'chat', label: 'Message', icon: MessageSquare },
+      { id: 'chat', label: 'Message', icon: MessageSquare, hasNotification: hasUnreadRequests },
       { id: 'profile', label: 'Profile', icon: User },
     ] : []),
   ];
@@ -408,11 +438,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <button className="flex items-center gap-2 cursor-pointer transition-transform hover:scale-105 mr-4 lg:mr-8" onClick={() => setCurrentView('home')}>
-              <div className="w-8 h-8 bg-white dark:bg-[#09090b] border border-red-200 rounded-lg flex items-center justify-center shadow-sm">
-                <svg viewBox="0 0 100 100" className="text-red-700 w-5 h-5" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M 50 15 L 20 80 L 80 80 Z" fill="currentColor" />
-                  <path d="M 23 78 L 72 48 L 65 72 Z" stroke="white" strokeWidth="3" fill="none" />
-                  <path d="M 72 48 L 78 78" stroke="white" strokeWidth="3" fill="none" />
+              <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                <svg viewBox="0 0 100 100" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M50 5 L10 95 L90 95 Z" fill="#C62828" />
+                  <path d="M14 85 L76 58 M49 69 L65 95" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
               <span className="font-bold text-xl tracking-tight text-slate-900 dark:text-slate-50">MICompete</span>
@@ -424,11 +453,16 @@ export default function App() {
                 <button
                   key={item.id}
                   onClick={() => setCurrentView(item.id as View)}
-                  className={`flex items-center gap-1.5 lg:gap-2 text-xs lg:text-sm font-medium transition-colors ${
+                  className={`relative flex items-center gap-1.5 lg:gap-2 text-xs lg:text-sm font-medium transition-colors ${
                     currentView === item.id ? 'text-red-600 border-b-2 border-red-600 pb-1 mt-1' : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50 pb-1 mt-1'
                   }`}
                 >
-                  <item.icon className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+                  <div className="relative flex items-center justify-center">
+                    <item.icon className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+                    {item.hasNotification && (
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-600 rounded-full animate-pulse border-2 border-white dark:border-[#09090b] box-content"></span>
+                    )}
+                  </div>
                   {item.label}
                 </button>
               ))}
@@ -473,7 +507,12 @@ export default function App() {
                     }}
                     className="flex items-center gap-3 w-full px-3 py-3 text-base font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-[#18181b] rounded-md"
                   >
-                    <item.icon className="w-5 h-5" />
+                    <div className="relative flex items-center justify-center">
+                      <item.icon className="w-5 h-5" />
+                      {item.hasNotification && (
+                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse border-2 border-white dark:border-[#09090b] box-content"></span>
+                      )}
+                    </div>
                     {item.label}
                   </button>
                 ))}
@@ -871,21 +910,17 @@ export default function App() {
                         <div className="absolute bottom-1 right-0 w-4 h-4 bg-green-500 border-2 border-[#0d1117] rounded-full"></div>
                       </div>
                       <h3 className="font-bold text-lg text-slate-900 dark:text-slate-50 cursor-pointer hover:text-red-600" onClick={() => openProfileModal(tm)}>{formatNameForPrivacy(currentUser?.uid, tm.uid, tm.displayName)}</h3>
-                      <p className="text-xs text-slate-700 dark:text-slate-300 mb-4 font-medium uppercase tracking-wide truncate">{tm.degree} @ {tm.collegeName}</p>
-                      {tm.experienceYears !== undefined && tm.experienceYears > 0 ? (
-                        <p className="text-xs text-slate-700 dark:text-slate-300 mb-4 font-medium uppercase tracking-wide truncate">{tm.role} @ {tm.companyName} ({tm.experienceYears} Yrs)</p>
-                      ) : (
-                        <p className="text-xs text-slate-700 dark:text-slate-300 mb-4 font-medium uppercase tracking-wide truncate">Fresher</p>
-                      )}
+                      <p className="text-xs text-slate-700 dark:text-slate-300 mb-0.5 font-medium uppercase tracking-wide truncate">{tm.degree || 'Current Program'}</p>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 mb-4 font-medium uppercase tracking-wide truncate">{tm.ugDegree || 'UG Degree'}{tm.collegeName ? ` @ ${tm.collegeName}` : ''}</p>
                       
-                      <div className="flex flex-wrap gap-2 mb-6 min-h-[4rem]">
+                      <div className="flex flex-wrap justify-center items-center gap-2 mb-6 min-h-[3rem]">
                         {tm.skills?.slice(0, 3).map(skill => (
-                          <span key={skill} className="text-[10px] bg-slate-50 dark:bg-[#18181b] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-2 py-1 rounded-md font-bold uppercase tracking-tight">
+                          <span key={skill} className="text-[10px] bg-slate-50 dark:bg-[#18181b] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-2 py-1 rounded-md font-bold uppercase tracking-tight text-center">
                             {skill}
                           </span>
                         ))}
                         {(tm.skills?.length || 0) > 3 && (
-                          <span className="text-[10px] bg-red-500/20 text-red-700 border border-red-200 px-2 py-1 rounded-md font-bold">
+                          <span className="text-[10px] bg-red-500/20 text-red-700 border border-red-200 px-2 py-1 rounded-md font-bold text-center">
                             +{(tm.skills?.length || 0) - 3}
                           </span>
                         )}
@@ -1024,28 +1059,37 @@ export default function App() {
                            </select>
                         </div>
                       </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Current Program <span className="text-red-500">*</span></label>
+                        <select 
+                          value={profileForm.degree}
+                          onChange={(e) => setProfileForm({...profileForm, degree: e.target.value})}
+                          className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50"
+                        >
+                          <option value="">Select Program</option>
+                          <option value="PGDM">PGDM</option>
+                          <option value="PGDM-C">PGDM-C</option>
+                          <option value="CCC">CCC</option>
+                          <option value="CCE">CCE</option>
+                        </select>
+                      </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Degree/Program <span className="text-red-500">*</span></label>
-                          <select 
-                            value={profileForm.degree}
-                            onChange={(e) => setProfileForm({...profileForm, degree: e.target.value})}
-                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50"
-                          >
-                            <option value="">Select Program</option>
-                            <option value="PGDM">PGDM</option>
-                            <option value="PGDM-C">PGDM-C</option>
-                            <option value="CCC">CCC</option>
-                            <option value="CCE">CCE</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">College Name <span className="text-red-500">*</span></label>
+                          <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">UG Name <span className="text-red-500">*</span></label>
                           <input 
                             value={profileForm.collegeName}
                             onChange={(e) => setProfileForm({...profileForm, collegeName: e.target.value})}
                             className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50 placeholder-slate-500" 
-                            placeholder="e.g. ISB" 
+                            placeholder="e.g. IIT Kharagpur" 
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">UG Degree <span className="text-red-500">*</span></label>
+                          <input 
+                            value={profileForm.ugDegree}
+                            onChange={(e) => setProfileForm({...profileForm, ugDegree: e.target.value})}
+                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50 placeholder-slate-500" 
+                            placeholder="e.g. B.Tech" 
                           />
                         </div>
                       </div>
@@ -1081,8 +1125,8 @@ export default function App() {
                                   <select value={exp.durationYears ?? 0} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, durationYears: parseInt(e.target.value)} : we)})} className="w-1/2 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-2 text-sm text-slate-900 dark:text-slate-50">
                                     {Array.from({length: 16}, (_, i) => <option key={i} value={i}>{i} Yrs</option>)}
                                   </select>
-                                  <select value={exp.durationMonths ?? 1} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, durationMonths: parseInt(e.target.value)} : we)})} className="w-1/2 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-2 text-sm text-slate-900 dark:text-slate-50">
-                                    {Array.from({length: 12}, (_, i) => <option key={i+1} value={i+1}>{i+1} Mos</option>)}
+                                  <select value={exp.durationMonths ?? 0} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, durationMonths: parseInt(e.target.value)} : we)})} className="w-1/2 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-2 text-sm text-slate-900 dark:text-slate-50">
+                                    {Array.from({length: 12}, (_, i) => <option key={i} value={i}>{i} Mos</option>)}
                                   </select>
                                 </div>
                                 <button type="button" onClick={() => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.filter((_, i) => i !== idx)})} className="absolute -top-2 -right-2 bg-red-100 text-red-600 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pb-0.5 shadow-sm text-xs border border-red-200">
@@ -1134,6 +1178,7 @@ export default function App() {
                             setProfileForm({
                               displayName: userProfile.displayName || '',
                               degree: userProfile.degree || '',
+                              ugDegree: userProfile.ugDegree || '',
                               collegeName: userProfile.collegeName || '',
                               experienceYears: userProfile.experienceYears || 0,
                               companyName: userProfile.companyName || '',
@@ -1168,14 +1213,18 @@ export default function App() {
                         <p className="text-slate-900 dark:text-slate-50">{userProfile?.gender || '-'}</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Degree</h3>
+                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Current Program</h3>
                         <p className="text-slate-900 dark:text-slate-50">{userProfile?.degree || '-'}</p>
                       </div>
                       <div>
-                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">College Name</h3>
+                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">UG Name</h3>
                         <p className="text-slate-900 dark:text-slate-50">{userProfile?.collegeName || '-'}</p>
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">UG Degree</h3>
+                        <p className="text-slate-900 dark:text-slate-50">{userProfile?.ugDegree || '-'}</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -1314,7 +1363,7 @@ export default function App() {
                            </div>
                            <div className="text-left">
                               <div className="font-bold text-sm text-black dark:text-slate-50">{formatNameForPrivacy(currentUser?.uid, t.uid, t.displayName)}</div>
-                              <div className="text-xs text-black dark:text-slate-300 truncate w-32">{t.degree || 'Fresher'}</div>
+                              <div className="text-xs text-black dark:text-slate-300 truncate w-32">{t.degree || 'Current Program'}</div>
                            </div>
                          </div>
                          {getRequestStatus(t.uid)?.status === 'pending' && !getRequestStatus(t.uid)?.isSender && (
@@ -1350,7 +1399,7 @@ export default function App() {
                           </div>
                           <div className="flex flex-col">
                             <div className="font-bold text-sm text-black dark:text-slate-50">{formatNameForPrivacy(currentUser?.uid, selectedPartner.uid, selectedPartner.displayName)}</div>
-                            <div className="text-xs text-black dark:text-slate-400">{selectedPartner.degree || 'Fresher'}</div>
+                            <div className="text-xs text-black dark:text-slate-400">{selectedPartner.degree || 'Current Program'}</div>
                           </div>
                         </div>
                         <button onClick={() => openProfileModal(selectedPartner)} className="p-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50">
@@ -1468,11 +1517,16 @@ export default function App() {
           <button
             key={item.id}
             onClick={() => setCurrentView(item.id as View)}
-            className={`p-2 transition-colors ${
+            className={`p-2 transition-colors relative ${
               currentView === item.id ? 'text-red-600' : 'text-slate-700 dark:text-slate-300'
             }`}
           >
-            <item.icon className="w-6 h-6" />
+            <div className="relative flex items-center justify-center">
+              <item.icon className="w-6 h-6" />
+              {item.hasNotification && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse border-2 border-white dark:border-[#09090b] box-content"></span>
+              )}
+            </div>
           </button>
         ))}
       </div>
@@ -1513,13 +1567,9 @@ export default function App() {
                     <div>
                       <h2 className="text-3xl font-bold text-slate-900 dark:text-slate-50 mb-1">{formatNameForPrivacy(currentUser?.uid, selectedProfileModal.uid, selectedProfileModal.displayName)}</h2>
                       <div className="text-sm font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wider flex flex-wrap gap-2 items-center">
-                        <span>{selectedProfileModal.degree} @ {selectedProfileModal.collegeName}</span>
-                        {selectedProfileModal.experienceYears !== undefined && selectedProfileModal.experienceYears > 0 && (
-                           <>
-                             <span className="opacity-50">•</span>
-                             <span>{selectedProfileModal.role} @ {selectedProfileModal.companyName} ({selectedProfileModal.experienceYears} Yrs)</span>
-                           </>
-                        )}
+                        <span>{selectedProfileModal.degree || 'Current Program'}</span>
+                        <span className="opacity-50">•</span>
+                        <span>{selectedProfileModal.ugDegree || 'UG Degree'}{selectedProfileModal.collegeName ? ` @ ${selectedProfileModal.collegeName}` : ''}</span>
                       </div>
                     </div>
 
