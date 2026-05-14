@@ -46,6 +46,7 @@ export interface Message {
   text: string;
   senderId: string;
   receiverId: string;
+  isRead?: boolean;
   createdAt: any;
 }
 

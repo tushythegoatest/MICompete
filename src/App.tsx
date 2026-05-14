@@ -38,7 +38,9 @@ import {
   listenToMessageRequests,
   sendMessageRequest,
   updateMessageRequestStatus,
-  checkChatExists
+  checkChatExists,
+  listenToTotalUnreadMessages,
+  markMessagesAsRead
 } from './services/firebaseService.ts';
 
 export const formatNameForPrivacy = (currentUserUid: string | undefined, profileUid: string, rawName: string | undefined): string => {
@@ -73,6 +75,7 @@ export default function App() {
     scrollToBottom();
   }, [chatMessages, selectedPartner]);
   const [messageRequests, setMessageRequests] = useState<MessageRequest[]>([]);
+  const [totalUnreadMessages, setTotalUnreadMessages] = useState(0);
   const [newMessage, setNewMessage] = useState('');
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [isSearchingComp, setIsSearchingComp] = useState(false);
@@ -170,6 +173,10 @@ export default function App() {
       unsubscribe = listenToMessages(currentUser.uid, selectedPartner.uid, (msgs) => {
         setChatMessages(msgs);
         setIsMessagesLoading(false);
+        const hasUnread = msgs.some(m => m.receiverId === currentUser.uid && !m.isRead);
+        if (hasUnread) {
+          markMessagesAsRead(selectedPartner.uid, currentUser.uid);
+        }
       });
     } else {
       setChatMessages([]);
@@ -178,13 +185,20 @@ export default function App() {
   }, [currentView, currentUser, selectedPartner]);
 
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
+    let unsubscribeReqs: (() => void) | undefined;
+    let unsubscribeUnread: (() => void) | undefined;
     if (currentUser) {
-      unsubscribe = listenToMessageRequests(currentUser.uid, (requests) => {
+      unsubscribeReqs = listenToMessageRequests(currentUser.uid, (requests) => {
         setMessageRequests(requests);
       });
+      unsubscribeUnread = listenToTotalUnreadMessages(currentUser.uid, (count) => {
+        setTotalUnreadMessages(count);
+      });
     }
-    return () => unsubscribe?.();
+    return () => {
+      unsubscribeReqs?.();
+      unsubscribeUnread?.();
+    };
   }, [currentUser]);
 
   const fetchTeammates = async () => {
@@ -408,12 +422,13 @@ export default function App() {
   };
 
   const hasUnreadRequests = messageRequests.some(req => !req.isSender && req.status === 'pending');
+  const hasUnreadMessages = totalUnreadMessages > 0;
 
   const navItems = [
     ...(currentUser ? [
       { id: 'competitions', label: 'Compete', icon: Trophy },
       { id: 'teammates', label: 'Connect', icon: Network },
-      { id: 'chat', label: 'Message', icon: MessageSquare, hasNotification: hasUnreadRequests },
+      { id: 'chat', label: 'Message', icon: MessageSquare, hasNotification: hasUnreadRequests || hasUnreadMessages },
       { id: 'profile', label: 'Profile', icon: User },
     ] : []),
   ];
@@ -440,8 +455,9 @@ export default function App() {
             <button className="flex items-center gap-2 cursor-pointer transition-transform hover:scale-105 mr-4 lg:mr-8" onClick={() => setCurrentView('home')}>
               <div className="w-8 h-8 flex items-center justify-center shrink-0">
                 <svg viewBox="0 0 100 100" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M50 5 L10 95 L90 95 Z" fill="#C62828" />
-                  <path d="M14 85 L76 58 M49 69 L65 95" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M50 5 L5 95 L95 95 Z" fill="#B32025" />
+                  <line x1="5" y1="95" x2="75" y2="50" stroke="white" strokeWidth="3" strokeLinecap="square" />
+                  <line x1="48" y1="67" x2="65" y2="95" stroke="white" strokeWidth="3" strokeLinecap="square" />
                 </svg>
               </div>
               <span className="font-bold text-xl tracking-tight text-slate-900 dark:text-slate-50">MICompete</span>

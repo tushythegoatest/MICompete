@@ -11,7 +11,9 @@ import {
   serverTimestamp,
   addDoc,
   deleteDoc,
-  limit
+  limit,
+  collectionGroup,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -142,10 +144,49 @@ export const sendMessage = async (senderId: string, receiverId: string, text: st
       text,
       senderId,
       receiverId,
+      isRead: false,
       createdAt: serverTimestamp(),
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const markMessagesAsRead = async (senderId: string, receiverId: string) => {
+  const chatId = [senderId, receiverId].sort().join('_');
+  const path = `chats/${chatId}/messages`;
+  try {
+    const q = query(
+      collection(db, 'chats', chatId, 'messages'),
+      where('receiverId', '==', receiverId),
+      where('isRead', '==', false)
+    );
+    const snapshot = await getDocs(q);
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((messageDoc) => {
+      batch.update(messageDoc.ref, { isRead: true });
+    });
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+};
+
+export const listenToTotalUnreadMessages = (userId: string, callback: (count: number) => void) => {
+  const path = `messages`;
+  try {
+    const q = query(
+      collectionGroup(db, 'messages'),
+      where('receiverId', '==', userId),
+      where('isRead', '==', false)
+    );
+    return onSnapshot(q, (snapshot) => {
+      callback(snapshot.docs.length);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, path);
+    });
+  } catch (err) {
+    return () => {};
   }
 };
 
