@@ -64,16 +64,19 @@ export default function App() {
   const [selectedPartner, setSelectedPartner] = useState<UserProfile | null>(null);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
     }, 100);
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [chatMessages, selectedPartner]);
+  }, [chatMessages.length, selectedPartner]);
   const [messageRequests, setMessageRequests] = useState<MessageRequest[]>([]);
   const [totalUnreadMessages, setTotalUnreadMessages] = useState(0);
   const [newMessage, setNewMessage] = useState('');
@@ -1423,7 +1426,7 @@ export default function App() {
                         </button>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-transparent min-h-0 relative z-10">
+                    <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-transparent min-h-0 relative z-10">
                         {isMessagesLoading ? (
                           <div className="h-full flex items-center justify-center">
                             <Loader2 className="w-8 h-8 animate-spin text-red-600" />

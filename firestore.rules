@@ -48,10 +48,11 @@ service cloud.firestore {
     }
 
     function isValidChatMessage(data) {
-      return data.keys().hasAll(['text', 'senderId', 'receiverId', 'createdAt'])
+      return data.keys().hasAll(['text', 'senderId', 'receiverId', 'createdAt', 'isRead'])
         && data.senderId == request.auth.uid
         && data.receiverId is string && isValidId(data.receiverId)
         && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.isRead is bool
         && data.createdAt == request.time;
     }
 
@@ -97,7 +98,18 @@ service cloud.firestore {
           && isValidId(chatId)
           && isValidId(messageId)
           && isValidChatMessage(incoming());
+
+        allow update: if isSignedIn()
+          && isValidId(chatId)
+          && isValidId(messageId)
+          && existing().receiverId == request.auth.uid
+          && incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
+          && incoming().isRead == true;
       }
+    }
+
+    match /{path=**}/messages/{messageId} {
+      allow list: if isSignedIn() && resource.data.receiverId == request.auth.uid;
     }
 
     // Collection: Endorsements
