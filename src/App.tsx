@@ -86,6 +86,7 @@ export default function App() {
 
   // Filters
   const [filterSkill, setFilterSkill] = useState('');
+  const [teammatesTab, setTeammatesTab] = useState<'discover' | 'requests'>('discover');
   const [filterExperience, setFilterExperience] = useState('');
   const [filterMinComps, setFilterMinComps] = useState('');
   const [sortBy, setSortBy] = useState<'relevance' | 'active'>('relevance');
@@ -114,6 +115,7 @@ export default function App() {
   const [profileForm, setProfileForm] = useState(DEFAULT_PROFILE_FORM);
 
   const [showProfileSavedSplash, setShowProfileSavedSplash] = useState(false);
+  const [profileError, setProfileError] = useState('');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const [showDeleteProgressDialog, setShowDeleteProgressDialog] = useState(false);
@@ -230,6 +232,7 @@ export default function App() {
   const handleSaveProfile = async () => {
     if (!currentUser) return;
     
+    setProfileError('');
     if (
       !profileForm.displayName.trim() ||
       !profileForm.degree.trim() ||
@@ -239,13 +242,13 @@ export default function App() {
       profileForm.competitionCount === undefined ||
       !profileForm.bio.trim()
     ) {
-      alert("Please fill all mandatory fields.");
+      setProfileError("Please fill all mandatory fields.");
       return;
     }
 
     const hasInvalidExp = profileForm.workExperiences.some(e => !e.company.trim() || !e.role.trim() || (e.durationYears === undefined && e.durationMonths === undefined && (!e.duration || !e.duration.trim())));
     if (hasInvalidExp) {
-       alert("Please fill all fields in your work experiences.");
+       setProfileError("Please fill all fields in your work experiences.");
        return;
     }
 
@@ -371,7 +374,7 @@ export default function App() {
     ...(currentUser ? [
       { id: 'competitions', label: 'Compete', icon: Trophy },
       { id: 'teammates', label: 'Connect', icon: Network },
-      { id: 'chat', label: 'Message', icon: MessageSquare, hasNotification: hasUnreadRequests || hasUnreadMessages },
+      { id: 'chat', label: 'Message', icon: MessageSquare, hasNotification: hasUnreadMessages },
       { id: 'profile', label: 'Profile', icon: User },
     ] : []),
   ];
@@ -790,8 +793,34 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Filters */}
-              <div className="bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-wrap gap-4 items-end">
+              <div className="flex gap-4 border-b border-slate-200 dark:border-slate-800 relative w-full mb-6 max-w-full overflow-x-auto no-scrollbar">
+                <button 
+                  onClick={() => setTeammatesTab('discover')}
+                  className={`pb-3 text-sm font-bold tracking-wide uppercase transition-colors whitespace-nowrap relative ${teammatesTab === 'discover' ? 'text-slate-900 dark:text-slate-50' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  Discover
+                  {teammatesTab === 'discover' && (
+                    <motion.div layoutId="teammatesTabLine" className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />
+                  )}
+                </button>
+                <button 
+                  onClick={() => setTeammatesTab('requests')}
+                  className={`pb-3 text-sm font-bold tracking-wide uppercase transition-colors whitespace-nowrap relative flex items-center gap-2 ${teammatesTab === 'requests' ? 'text-slate-900 dark:text-slate-50' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >
+                  Requests
+                  {messageRequests.filter(r => r.receiverId === currentUser?.uid && r.status === 'pending').length > 0 && (
+                     <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">{messageRequests.filter(r => r.receiverId === currentUser?.uid && r.status === 'pending').length}</span>
+                  )}
+                  {teammatesTab === 'requests' && (
+                    <motion.div layoutId="teammatesTabLine" className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />
+                  )}
+                </button>
+              </div>
+
+              {teammatesTab === 'discover' ? (
+                <>
+                  {/* Filters */}
+                  <div className="bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-wrap gap-4 items-end">
                 <div className="flex-1 min-w-[200px]">
                   <label className="block text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Search Skills</label>
                   <input 
@@ -835,131 +864,199 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {getFilteredTeammates().map((tm, idx) => (
-                  <motion.div 
-                    key={tm.uid} 
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: false, margin: "-50px" }}
-                    transition={{ duration: 0.4, delay: (idx % 3) * 0.1 }}
-                    className="bg-slate-50 dark:bg-[#18181b] backdrop-blur-xl overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 group hover:bg-slate-100 dark:bg-[#27272a]"
-                  >
-                    <div className="h-24 bg-gradient-to-br from-red-600/20 to-red-500/20 opacity-50 relative cursor-pointer" onClick={() => openProfileModal(tm)}>
-                       <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-md px-2 py-1 rounded-md text-xs text-slate-900 dark:text-slate-50 flex items-center gap-1 font-bold">
-                          <Trophy className="w-3 h-3 text-yellow-400" /> {tm.competitionCount === 11 ? '10+' : (tm.competitionCount || 0)}
-                       </div>
-                    </div>
-                    <div className="px-6 pb-6 -mt-10">
-                      <div className="relative mb-4 cursor-pointer" onClick={() => openProfileModal(tm)}>
-                        <div className="w-20 h-20 bg-white dark:bg-[#09090b] rounded-2xl border-4 border-[#0d1117] shadow-xl flex items-center justify-center font-bold text-2xl overflow-hidden">
-                          {tm.photoURL ? (
-                            <img src={tm.photoURL} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          ) : (
-                            <span className="text-slate-900 dark:text-slate-50">{formatNameForPrivacy(currentUser?.uid, tm.uid, tm.displayName)?.[0]}</span>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {getFilteredTeammates().map((tm, idx) => (
+                    <motion.div 
+                      key={tm.uid} 
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: false, margin: "-50px" }}
+                      transition={{ duration: 0.4, delay: (idx % 3) * 0.1 }}
+                      className="bg-slate-50 dark:bg-[#18181b] backdrop-blur-xl overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 group hover:bg-slate-100 dark:bg-[#27272a]"
+                    >
+                      <div className="h-24 bg-gradient-to-br from-red-600/20 to-red-500/20 opacity-50 relative cursor-pointer" onClick={() => openProfileModal(tm)}>
+                         <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-md px-2 py-1 rounded-md text-xs text-slate-900 dark:text-slate-50 flex items-center gap-1 font-bold">
+                            <Trophy className="w-3 h-3 text-yellow-400" /> {tm.competitionCount === 11 ? '10+' : (tm.competitionCount || 0)}
+                         </div>
+                      </div>
+                      <div className="px-6 pb-6 -mt-10">
+                        <div className="relative mb-4 cursor-pointer" onClick={() => openProfileModal(tm)}>
+                          <div className="w-20 h-20 bg-white dark:bg-[#09090b] rounded-2xl border-4 border-[#0d1117] shadow-xl flex items-center justify-center font-bold text-2xl overflow-hidden">
+                            {tm.photoURL ? (
+                              <img src={tm.photoURL} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <span className="text-slate-900 dark:text-slate-50">{formatNameForPrivacy(currentUser?.uid, tm.uid, tm.displayName)?.[0]}</span>
+                            )}
+                          </div>
+                          <div className="absolute bottom-1 right-0 w-4 h-4 bg-green-500 border-2 border-[#0d1117] rounded-full"></div>
+                        </div>
+                        <h3 className="font-bold text-lg text-slate-900 dark:text-slate-50 cursor-pointer hover:text-red-600" onClick={() => openProfileModal(tm)}>{formatNameForPrivacy(currentUser?.uid, tm.uid, tm.displayName)}</h3>
+                        <p className="text-xs text-slate-700 dark:text-slate-300 mb-0.5 font-medium uppercase tracking-wide truncate">{tm.degree || 'Current Program'}</p>
+                        <p className="text-xs text-slate-700 dark:text-slate-300 mb-4 font-medium uppercase tracking-wide truncate">{tm.ugDegree || 'UG Degree'}{tm.collegeName ? ` @ ${tm.collegeName}` : ''}</p>
+                        
+                        {tm.experienceYears && tm.experienceYears > 0 ? (
+                          <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium tracking-wide mb-4 bg-slate-100 dark:bg-[#27272a] py-1 px-3 rounded-full w-fit mx-auto truncate max-w-[80%]">
+                             <Briefcase className="w-3.5 h-3.5" /> 
+                             {(() => {
+                                const yrs = Math.floor(tm.experienceYears);
+                                const mos = Math.round((tm.experienceYears - yrs) * 12);
+                                let parts = [];
+                                if (yrs > 0) parts.push(`${yrs} Yr${yrs > 1 ? 's' : ''}`);
+                                if (mos > 0) parts.push(`${mos} Mo${mos > 1 ? 's' : ''}`);
+                                return parts.join(' ');
+                             })()}
+                             {tm.role && tm.companyName && <span className="opacity-75 md:inline hidden truncate"> - {tm.role} @ {tm.companyName}</span>}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium tracking-wide mb-4 bg-slate-100 dark:bg-[#27272a] py-1 px-3 rounded-full w-fit mx-auto">
+                             <Briefcase className="w-3.5 h-3.5" /> Fresher
+                          </div>
+                        )}
+                        
+                        <div className="flex flex-wrap justify-center items-center gap-2 mb-6 min-h-[3rem]">
+                          {tm.skills?.slice(0, 3).map(skill => (
+                            <span key={skill} className="text-[10px] bg-slate-50 dark:bg-[#18181b] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-2 py-1 rounded-md font-bold uppercase tracking-tight text-center">
+                              {skill}
+                            </span>
+                          ))}
+                          {(tm.skills?.length || 0) > 3 && (
+                            <span className="text-[10px] bg-red-500/20 text-red-700 border border-red-200 px-2 py-1 rounded-md font-bold text-center">
+                              +{(tm.skills?.length || 0) - 3}
+                            </span>
                           )}
                         </div>
-                        <div className="absolute bottom-1 right-0 w-4 h-4 bg-green-500 border-2 border-[#0d1117] rounded-full"></div>
-                      </div>
-                      <h3 className="font-bold text-lg text-slate-900 dark:text-slate-50 cursor-pointer hover:text-red-600" onClick={() => openProfileModal(tm)}>{formatNameForPrivacy(currentUser?.uid, tm.uid, tm.displayName)}</h3>
-                      <p className="text-xs text-slate-700 dark:text-slate-300 mb-0.5 font-medium uppercase tracking-wide truncate">{tm.degree || 'Current Program'}</p>
-                      <p className="text-xs text-slate-700 dark:text-slate-300 mb-4 font-medium uppercase tracking-wide truncate">{tm.ugDegree || 'UG Degree'}{tm.collegeName ? ` @ ${tm.collegeName}` : ''}</p>
-                      
-                      {tm.experienceYears && tm.experienceYears > 0 ? (
-                        <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium tracking-wide mb-4 bg-slate-100 dark:bg-[#27272a] py-1 px-3 rounded-full w-fit mx-auto truncate max-w-[80%]">
-                           <Briefcase className="w-3.5 h-3.5" /> 
-                           {(() => {
-                              const yrs = Math.floor(tm.experienceYears);
-                              const mos = Math.round((tm.experienceYears - yrs) * 12);
-                              let parts = [];
-                              if (yrs > 0) parts.push(`${yrs} Yr${yrs > 1 ? 's' : ''}`);
-                              if (mos > 0) parts.push(`${mos} Mo${mos > 1 ? 's' : ''}`);
-                              return parts.join(' ');
-                           })()}
-                           {tm.role && tm.companyName && <span className="opacity-75 md:inline hidden truncate"> - {tm.role} @ {tm.companyName}</span>}
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium tracking-wide mb-4 bg-slate-100 dark:bg-[#27272a] py-1 px-3 rounded-full w-fit mx-auto">
-                           <Briefcase className="w-3.5 h-3.5" /> Fresher
-                        </div>
-                      )}
-                      
-                      <div className="flex flex-wrap justify-center items-center gap-2 mb-6 min-h-[3rem]">
-                        {tm.skills?.slice(0, 3).map(skill => (
-                          <span key={skill} className="text-[10px] bg-slate-50 dark:bg-[#18181b] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 px-2 py-1 rounded-md font-bold uppercase tracking-tight text-center">
-                            {skill}
-                          </span>
-                        ))}
-                        {(tm.skills?.length || 0) > 3 && (
-                          <span className="text-[10px] bg-red-500/20 text-red-700 border border-red-200 px-2 py-1 rounded-md font-bold text-center">
-                            +{(tm.skills?.length || 0) - 3}
-                          </span>
-                        )}
-                      </div>
 
-                      <div className="flex items-center justify-between gap-2">
-                        <button 
-                          onClick={() => openProfileModal(tm)}
-                          className="flex-1 bg-slate-50 dark:bg-[#18181b] text-slate-900 dark:text-slate-50 py-2 rounded-lg text-sm font-bold hover:bg-slate-100 dark:bg-[#27272a] transition-colors border border-slate-200 dark:border-slate-800"
-                        >
-                          View Profile
-                        </button>
-                        {(() => {
-                          const reqStatus = getRequestStatus(tm.uid);
-                          if (!reqStatus || reqStatus.status === 'rejected') {
-                            return (
-                              <button 
-                                onClick={async () => {
-                                  if (currentUser) {
-                                    await sendMessageRequest(currentUser.uid, tm.uid);
-                                  }
-                                }}
-                                className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
-                              >
-                                <Network className="w-4 h-4" /> Connect
-                              </button>
-                            );
-                          } else if (reqStatus.status === 'pending') {
-                            if (!reqStatus.isSender) {
-                               return (
-                                 <div className="flex-1 flex gap-1">
-                                   <button onClick={() => updateMessageRequestStatus(reqStatus.req.id, 'accepted')} className="flex-1 bg-green-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-green-500 transition-colors">Accept</button>
-                                   <button onClick={() => updateMessageRequestStatus(reqStatus.req.id, 'rejected')} className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-2 rounded-lg text-xs font-bold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">Reject</button>
-                                 </div>
-                               );
+                        <div className="flex items-center justify-between gap-2">
+                          <button 
+                            onClick={() => openProfileModal(tm)}
+                            className="flex-1 bg-slate-50 dark:bg-[#18181b] text-slate-900 dark:text-slate-50 py-2 rounded-lg text-sm font-bold hover:bg-slate-100 dark:bg-[#27272a] transition-colors border border-slate-200 dark:border-slate-800"
+                          >
+                            View Profile
+                          </button>
+                          {(() => {
+                            const reqStatus = getRequestStatus(tm.uid);
+                            if (!reqStatus || reqStatus.status === 'rejected') {
+                              return (
+                                <button 
+                                  onClick={async () => {
+                                    if (currentUser) {
+                                      await sendMessageRequest(currentUser.uid, tm.uid);
+                                    }
+                                  }}
+                                  className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
+                                >
+                                  <Network className="w-4 h-4" /> Connect
+                                </button>
+                              );
+                            } else if (reqStatus.status === 'pending') {
+                              if (!reqStatus.isSender) {
+                                 return (
+                                   <div className="flex-1 flex gap-1">
+                                     <button onClick={() => updateMessageRequestStatus(reqStatus.req.id, 'accepted')} className="flex-1 bg-green-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-green-500 transition-colors">Accept</button>
+                                     <button onClick={() => updateMessageRequestStatus(reqStatus.req.id, 'rejected')} className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-2 rounded-lg text-xs font-bold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">Reject</button>
+                                   </div>
+                                 );
+                              }
+                              return (
+                                <button 
+                                  disabled
+                                  className="flex-1 bg-slate-200 dark:bg-[#27272a] text-slate-500 dark:text-slate-400 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"
+                                >
+                                  Requested
+                                </button>
+                              );
+                            } else {
+                              return (
+                                <button 
+                                  onClick={() => {
+                                    setSelectedPartner(tm);
+                                    setCurrentView('chat');
+                                  }}
+                                  className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
+                                >
+                                  <MessageSquare className="w-4 h-4" /> Message
+                                </button>
+                              );
                             }
-                            return (
-                              <button 
-                                disabled
-                                className="flex-1 bg-slate-200 dark:bg-[#27272a] text-slate-500 dark:text-slate-400 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"
-                              >
-                                Requested
-                              </button>
-                            );
-                          } else {
-                            return (
-                              <button 
-                                onClick={() => {
-                                  setSelectedPartner(tm);
-                                  setCurrentView('chat');
-                                }}
-                                className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
-                              >
-                                <MessageSquare className="w-4 h-4" /> Message
-                              </button>
-                            );
-                          }
-                        })()}
+                          })()}
+                        </div>
                       </div>
+                    </motion.div>
+                  ))}
+                  {getFilteredTeammates().length === 0 && (
+                    <div className="col-span-3 py-12 text-center text-slate-700 dark:text-slate-300">
+                      No potential teammates found yet. Be the first to join!
                     </div>
-                  </motion.div>
-                ))}
-                {getFilteredTeammates().length === 0 && (
-                  <div className="col-span-3 py-12 text-center text-slate-700 dark:text-slate-300">
-                    No potential teammates found yet. Be the first to join!
+                  )}
+                </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <h3 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 mb-4 flex items-center gap-2">
+                       Inbox
+                       {messageRequests.filter(r => r.receiverId === currentUser?.uid && r.status === 'pending').length > 0 && (
+                         <span className="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full">{messageRequests.filter(r => r.receiverId === currentUser?.uid && r.status === 'pending').length} New</span>
+                       )}
+                    </h3>
+                    <div className="bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden divide-y divide-slate-200 dark:divide-slate-800">
+                      {messageRequests.filter(r => r.receiverId === currentUser?.uid && r.status === 'pending').length === 0 ? (
+                        <p className="p-8 text-center text-sm text-slate-500 dark:text-slate-400 italic">No incoming requests</p>
+                      ) : messageRequests.filter(r => r.receiverId === currentUser?.uid && r.status === 'pending').map(req => {
+                        const sender = allTeammates.find(tm => tm.uid === req.senderId);
+                        if (!sender) return null;
+                        return (
+                          <div key={req.id} className="p-4 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => openProfileModal(sender)}>
+                               <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden shrink-0">
+                                  {sender.photoURL ? <img src={sender.photoURL} alt={sender.displayName} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-bold text-slate-700 dark:text-slate-300">{sender.displayName?.[0]}</div>}
+                               </div>
+                               <div>
+                                 <h4 className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-50 hover:text-red-600">{formatNameForPrivacy(currentUser?.uid, sender.uid, sender.displayName)}</h4>
+                                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate w-32 md:w-48">{sender.degree || 'Current Program'}</p>
+                               </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={() => updateMessageRequestStatus(req.id, 'accepted')} className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-500 transition-colors shadow-sm">Accept</button>
+                              <button onClick={() => updateMessageRequestStatus(req.id, 'rejected')} className="bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors shadow-sm">Reject</button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  <div>
+                    <h3 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50 mb-4">Sent Requests</h3>
+                    <div className="bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden divide-y divide-slate-200 dark:divide-slate-800">
+                      {messageRequests.filter(r => r.senderId === currentUser?.uid).length === 0 ? (
+                        <p className="p-8 text-center text-sm text-slate-500 dark:text-slate-400 italic">You haven't sent any requests</p>
+                      ) : messageRequests.filter(r => r.senderId === currentUser?.uid).map(req => {
+                        const receiver = allTeammates.find(tm => tm.uid === req.receiverId);
+                        if (!receiver) return null;
+                        return (
+                          <div key={req.id} className="p-4 flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => openProfileModal(receiver)}>
+                               <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden shrink-0  opacity-75">
+                                  {receiver.photoURL ? <img src={receiver.photoURL} alt={receiver.displayName} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-bold text-slate-700 dark:text-slate-300">{receiver.displayName?.[0]}</div>}
+                               </div>
+                               <div>
+                                 <h4 className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-50 hover:text-red-600">{formatNameForPrivacy(currentUser?.uid, receiver.uid, receiver.displayName)}</h4>
+                                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate w-32 md:w-full">{receiver.degree || 'Current Program'}</p>
+                               </div>
+                            </div>
+                            <div>
+                               {req.status === 'pending' && <span className="text-xs font-bold uppercase tracking-wide px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400">Pending</span>}
+                               {req.status === 'accepted' && <span className="text-xs font-bold uppercase tracking-wide px-2 py-1 rounded bg-green-500/20 text-green-600 dark:text-green-500 border border-green-500/20">Accepted</span>}
+                               {req.status === 'rejected' && <span className="text-xs font-bold uppercase tracking-wide px-2 py-1 rounded bg-red-500/20 text-red-600 dark:text-red-500 border border-red-500/20">Rejected</span>}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -1097,8 +1194,8 @@ export default function App() {
                                     {Array.from({length: 12}, (_, i) => <option key={i} value={i}>{i} Mos</option>)}
                                   </select>
                                 </div>
-                                <button type="button" onClick={() => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.filter((_, i) => i !== idx)})} className="absolute -top-2 -right-2 bg-red-100 text-red-600 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pb-0.5 shadow-sm text-xs border border-red-200">
-                                  x
+                                <button type="button" onClick={() => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.filter((_, i) => i !== idx)})} className="absolute -top-2 -right-2 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 w-6 h-6 rounded-full flex items-center justify-center shadow-sm text-xs border border-red-200 dark:border-red-800/40 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors">
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             ))}
@@ -1140,6 +1237,11 @@ export default function App() {
                         ></textarea>
                       </div>
                     </div>
+                    {profileError && (
+                      <div className="text-red-500 font-medium text-sm mt-4 text-center bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-200 dark:border-red-800">
+                        {profileError}
+                      </div>
+                    )}
                     <div className="flex gap-4 mt-8">
                       {userProfile && (
                         <button 
@@ -1619,7 +1721,7 @@ export default function App() {
                                       </span>
                                     )}
                                   </div>
-                                  {currentUser && currentUser.uid !== selectedProfileModal.uid && (
+                                  {currentUser && currentUser.uid !== selectedProfileModal.uid && (getRequestStatus(selectedProfileModal.uid)?.status === 'accepted' || activeChatUserIds.includes(selectedProfileModal.uid)) && (
                                     <button 
                                       onClick={() => handleEndorse(skill)}
                                       className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
