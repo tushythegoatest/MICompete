@@ -42,6 +42,8 @@ service cloud.firestore {
         && (!('companyName' in data) || (data.companyName is string && data.companyName.size() <= 1000))
         && (!('role' in data) || (data.role is string && data.role.size() <= 1000))
         && (!('workExperiences' in data) || (data.workExperiences is list && data.workExperiences.size() <= 5))
+        && (!('isPaused' in data) || (data.isPaused is bool))
+        && (!('isDeleted' in data) || (data.isDeleted is bool))
         && data.competitionCount is number && data.competitionCount >= 0
         && data.skills is list && data.skills.size() <= 50
         && data.createdAt == request.time;
@@ -76,7 +78,7 @@ service cloud.firestore {
         && incoming().uid == existing().uid
         && incoming().email == existing().email
         && (
-          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'collegeName', 'experienceYears', 'companyName', 'role', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'collegeName', 'experienceYears', 'companyName', 'role', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'isPaused', 'isDeleted'])
         );
     }
 

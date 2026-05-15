@@ -24,6 +24,8 @@ export interface UserProfile {
   competitionCount: number;
   bio: string;
   createdAt: any;
+  isPaused?: boolean;
+  isDeleted?: boolean;
 }
 
 export interface Competition {

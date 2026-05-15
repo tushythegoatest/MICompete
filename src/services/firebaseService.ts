@@ -79,7 +79,9 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
     const docRef = doc(db, 'users', uid);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-      return docSnap.data() as UserProfile;
+      const data = docSnap.data() as UserProfile;
+      if (data.isDeleted) return null;
+      return data;
     }
     return null;
   } catch (error) {
@@ -88,21 +90,24 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
   }
 };
 
-export const saveUserProfile = async (profile: Omit<UserProfile, 'createdAt'>) => {
+export const saveUserProfile = async (profile: Partial<UserProfile> & { uid: string }) => {
   const path = `users/${profile.uid}`;
   try {
     const docRef = doc(db, 'users', profile.uid);
     const docSnap = await getDoc(docRef);
     
+    // Strip createdAt to avoid rule violations on update
+    const { createdAt, ...profileToSave } = profile as any;
+    
     if (docSnap.exists()) {
       // Update
       await setDoc(docRef, {
-        ...profile,
+        ...profileToSave,
       }, { merge: true });
     } else {
       // Create
       await setDoc(docRef, {
-        ...profile,
+        ...profileToSave,
         createdAt: serverTimestamp(),
       });
     }
@@ -116,7 +121,7 @@ export const getAllUsers = async (): Promise<UserProfile[]> => {
   try {
     const q = query(collection(db, 'users'));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => doc.data() as UserProfile);
+    return querySnapshot.docs.map(doc => doc.data() as UserProfile).filter(user => !user.isPaused && !user.isDeleted);
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
     return [];
@@ -207,20 +212,6 @@ export const listenToMessages = (senderId: string, receiverId: string, callback:
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
   });
-};
-
-export const searchCompetitions = async () => {
-  try {
-    const response = await fetch('/api/competitions/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!response.ok) throw new Error('Search failed');
-    return await response.json();
-  } catch (error) {
-    console.error("Competition Search Error:", error);
-    return { competitions: [] };
-  }
 };
 
 export const endorseSkill = async (endorserId: string, endorseeId: string, skill: string) => {

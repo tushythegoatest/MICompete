@@ -17,7 +17,8 @@ import {
   Loader2,
   ThumbsUp,
   Network,
-  Trash2
+  Trash2,
+  Pause
 } from 'lucide-react';
 import { View, UserProfile, Competition, Message, Endorsement } from './types.ts';
 import { auth } from './lib/firebase.ts';
@@ -30,7 +31,6 @@ import {
   getAllUsers, 
   sendMessage, 
   listenToMessages,
-  searchCompetitions,
   endorseSkill,
   removeEndorsement,
   getEndorsementsForUser,
@@ -80,9 +80,6 @@ export default function App() {
   const [messageRequests, setMessageRequests] = useState<MessageRequest[]>([]);
   const [totalUnreadMessages, setTotalUnreadMessages] = useState(0);
   const [newMessage, setNewMessage] = useState('');
-  const [competitions, setCompetitions] = useState<Competition[]>([]);
-  const [isSearchingComp, setIsSearchingComp] = useState(false);
-  const [hasSearchedComps, setHasSearchedComps] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
 
@@ -96,8 +93,7 @@ export default function App() {
   const [selectedProfileModal, setSelectedProfileModal] = useState<UserProfile | null>(null);
   const [modalEndorsements, setModalEndorsements] = useState<Endorsement[]>([]);
 
-  // Profile Form State
-  const [profileForm, setProfileForm] = useState({
+  const DEFAULT_PROFILE_FORM = {
     displayName: '',
     photoURL: '',
     gender: '',
@@ -111,12 +107,16 @@ export default function App() {
     skills: '',
     competitionCount: 0,
     bio: ''
-  });
+  };
+
+  // Profile Form State
+  const [profileForm, setProfileForm] = useState(DEFAULT_PROFILE_FORM);
 
   const [showProfileSavedSplash, setShowProfileSavedSplash] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const [showDeleteProgressDialog, setShowDeleteProgressDialog] = useState(false);
+  const [showPauseConfirmDialog, setShowPauseConfirmDialog] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -146,7 +146,7 @@ export default function App() {
             document.documentElement.classList.remove('dark');
           }
         } else {
-          setProfileForm(prev => ({ ...prev, displayName: user.displayName || '', photoURL: user.photoURL || '' }));
+          setProfileForm({ ...DEFAULT_PROFILE_FORM, displayName: user.displayName || '', photoURL: user.photoURL || '' });
           setCurrentView('profile');
           setIsEditingProfile(true);
         }
@@ -163,9 +163,6 @@ export default function App() {
   useEffect(() => {
     if (currentView === 'teammates' || currentView === 'chat') {
       fetchTeammates();
-    }
-    if (currentView === 'competitions' && competitions.length === 0 && !hasSearchedComps) {
-      handleSearchCompetitions();
     }
   }, [currentView]);
 
@@ -229,64 +226,6 @@ export default function App() {
     return req ? { req, status: req.status, isSender: req.senderId === currentUser.uid } : null;
   };
 
-  const handleSearchCompetitions = async () => {
-    if (isSearchingComp) return;
-    setIsSearchingComp(true);
-    setHasSearchedComps(true);
-    try {
-      const data = await searchCompetitions();
-      if (data.competitions && data.competitions.length > 0) {
-        setCompetitions(data.competitions);
-      } else {
-        // Fallback locally
-        setCompetitions([
-          {
-            title: "Global Hackathon 2026",
-            organization: "Tech Innovators",
-            date: "Jan 05, 2026",
-            url: "https://unstop.com/hackathons"
-          },
-          {
-            title: "AI For Good Hackathon",
-            organization: "OpenAI",
-            date: "Mar 30, 2026",
-            url: "https://unstop.com/hackathons"
-          },
-          {
-            title: "Web3 Builders Weekend",
-            organization: "Ethereum Foundation",
-            date: "May 07, 2026",
-            url: "https://unstop.com/hackathons"
-          }
-        ]);
-      }
-    } catch (err) {
-      console.error(err);
-      setCompetitions([
-        {
-          title: "Global Hackathon 2026",
-          organization: "Tech Innovators",
-          date: "Jan 05, 2026",
-          url: "https://unstop.com/hackathons"
-        },
-        {
-          title: "AI For Good Hackathon",
-          organization: "OpenAI",
-          date: "Mar 30, 2026",
-          url: "https://unstop.com/hackathons"
-        },
-        {
-          title: "Web3 Builders Weekend",
-          organization: "Ethereum Foundation",
-          date: "May 07, 2026",
-          url: "https://unstop.com/hackathons"
-        }
-      ]);
-    } finally {
-      setIsSearchingComp(false);
-    }
-  };
-
   const handleSaveProfile = async () => {
     if (!currentUser) return;
     
@@ -337,6 +276,9 @@ export default function App() {
     const cleanedProfileData = Object.fromEntries(
       Object.entries(profileData).filter(([_, v]) => v !== undefined)
     ) as Omit<UserProfile, 'createdAt'>;
+
+    cleanedProfileData.isDeleted = false;
+    cleanedProfileData.isPaused = false;
 
     try {
       await saveUserProfile(cleanedProfileData);
@@ -607,7 +549,7 @@ export default function App() {
                                <Trophy className="text-red-400" />
                              </div>
                              <div>
-                               <div className="font-bold text-slate-900 dark:text-white text-xl">{competitions.length > 0 ? competitions.length : 15}+ events</div>
+                               <div className="font-bold text-slate-900 dark:text-white text-xl">15+ events</div>
                                <div className="text-sm text-slate-700 dark:text-slate-300">are ready to be disrupted</div>
                              </div>
                            </div>
@@ -720,7 +662,7 @@ export default function App() {
                                  <Trophy className="text-red-400" />
                                </div>
                                <div>
-                                 <div className="font-bold text-slate-900 dark:text-white text-xl">{competitions.length > 0 ? competitions.length : 15}+ events</div>
+                                 <div className="font-bold text-slate-900 dark:text-white text-xl">15+ events</div>
                                  <div className="text-sm text-slate-700 dark:text-slate-300">are ready to be disrupted</div>
                                </div>
                              </div>
@@ -785,53 +727,46 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-8"
             >
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center mb-8">
                 <div>
-                  <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Active Competitions</h2>
-                  <p className="text-slate-700 dark:text-slate-300">Curated from Devpost and more via AI</p>
+                  <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Explore Competitions</h2>
+                  <p className="text-slate-700 dark:text-slate-300">Discover and participate in top events across these platforms.</p>
                 </div>
-                <button 
-                  onClick={handleSearchCompetitions}
-                  disabled={isSearchingComp}
-                  className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-red-500"
-                >
-                  {isSearchingComp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                  {isSearchingComp ? 'Searching...' : 'Refresh List'}
-                </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {competitions.map((comp, idx) => (
-                  <motion.div 
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[
+                  { name: "Unstop", url: "https://unstop.com", desc: "Discover opportunities, participate in competitions, and get hired.", img: "https://assets.unstop.com/images/favicon.ico" },
+                  { name: "Xathon Mettl", url: "https://xathon.mettl.com/", desc: "A leading platform for hackathons and coding challenges.", img: "https://devfolio.co/favicon.ico" },
+                  { name: "Devfolio", url: "https://devfolio.co/", desc: "Grow through community and continuous learning with dev projects.", img: "https://devfolio.co/favicon.ico" },
+                  { name: "InsideIIM", url: "https://insideiim.com/", desc: "An integral platform for MBA students and aspirants.", img: "https://insideiim.com/favicon.ico" },
+                  { name: "HackerEarth", url: "https://www.hackerearth.com/", desc: "Participate in global developer hackathons and hiring challenges.", img: "https://www.hackerearth.com/favicon.ico" }
+                ].map((platform, idx) => (
+                  <motion.a 
+                    href={platform.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     key={idx} 
                     initial={{ opacity: 0, scale: 0.95 }}
                     whileInView={{ opacity: 1, scale: 1 }}
                     viewport={{ once: false, margin: "-50px" }}
-                    transition={{ duration: 0.4, delay: (idx % 2) * 0.1 }}
-                    className="bg-slate-50 dark:bg-[#18181b] backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-2xl p-6 hover:bg-slate-100 dark:bg-[#27272a] transition-colors"
+                    transition={{ duration: 0.4, delay: idx * 0.1 }}
+                    className="flex flex-col bg-slate-50 dark:bg-[#18181b] backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-2xl p-6 hover:bg-slate-100 hover:dark:bg-[#27272a] transition-all group"
                   >
                     <div className="flex justify-between items-start mb-4 gap-4">
-                      <div className="bg-red-500/20 text-red-700 border border-red-200 text-xs font-bold px-3 py-1.5 rounded-lg uppercase tracking-wider break-words text-left flex-1">
-                        {comp.organization}
+                      <div className="bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-50 border border-slate-300 dark:border-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg tracking-wider break-words text-left">
+                        Platform
                       </div>
-                      <div className="text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1 shrink-0 whitespace-nowrap mt-1">
-                        <Trophy className="w-3 h-3" />
-                        {comp.date}
-                      </div>
+                      <ExternalLink className="w-5 h-5 text-slate-400 group-hover:text-red-500 transition-colors" />
                     </div>
-                    <h3 className="font-bold text-xl mb-4 text-slate-900 dark:text-slate-50">{comp.title}</h3>
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-                      <a href={comp.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-semibold text-slate-200 hover:text-slate-900 dark:text-slate-50 transition-colors group">
-                        View Details <ExternalLink className="w-4 h-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                      </a>
-                      <button 
-                        onClick={() => setCurrentView('teammates')}
-                        className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors"
-                      >
-                        Find Teammates
-                      </button>
+                    <h3 className="font-bold text-2xl mb-2 text-slate-900 dark:text-slate-50">{platform.name}</h3>
+                    <p className="text-slate-600 dark:text-slate-400 text-sm mb-4 flex-1">
+                      {platform.desc}
+                    </p>
+                    <div className="flex items-center gap-2 mt-auto text-sm font-semibold text-red-600 group-hover:text-red-700 transition-colors">
+                      Visit Platform <ChevronRight className="w-4 h-4" />
                     </div>
-                  </motion.div>
+                  </motion.a>
                 ))}
               </div>
             </motion.div>
@@ -1303,7 +1238,7 @@ export default function App() {
                  <div className="bg-white dark:bg-[#09090b] backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-[#27272a] p-8 md:p-12 shadow-sm mt-8">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-6">Preferences & Settings</h2>
                     <div className="space-y-6">
-                      <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-[#18181b] rounded-xl border border-slate-200 dark:border-[#27272a]">
+                       <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-[#18181b] rounded-xl border border-slate-200 dark:border-[#27272a]">
                          <div>
                             <div className="font-bold text-slate-900 dark:text-slate-50">Dark Mode</div>
                             <div className="text-sm text-slate-700 dark:text-slate-300">Switch the app to a dark theme.</div>
@@ -1322,6 +1257,29 @@ export default function App() {
                            className={`w-12 h-6 rounded-full transition-colors relative ${userProfile?.darkMode ? 'bg-red-600' : 'bg-slate-300 dark:bg-slate-700'}`}
                          >
                            <div className={`w-4 h-4 rounded-full bg-white dark:bg-[#09090b] absolute top-1 transition-transform ${userProfile?.darkMode ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                         </button>
+                      </div>
+
+                      <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-[#18181b] rounded-xl border border-slate-200 dark:border-[#27272a]">
+                         <div>
+                            <div className="font-bold text-slate-900 dark:text-slate-50">Pause Account</div>
+                            <div className="text-sm text-slate-700 dark:text-slate-300">Temporarily hide your profile from others on Connect.</div>
+                         </div>
+                         <button 
+                           onClick={async () => {
+                             if (!userProfile?.isPaused) {
+                               setShowPauseConfirmDialog(true);
+                             } else {
+                               if (currentUser && userProfile) {
+                                 const updated = { ...userProfile, isPaused: false };
+                                 setUserProfile(updated);
+                                 await saveUserProfile(updated);
+                               }
+                             }
+                           }}
+                           className={`w-12 h-6 rounded-full transition-colors relative ${userProfile?.isPaused ? 'bg-red-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                         >
+                           <div className={`w-4 h-4 rounded-full bg-white dark:bg-[#09090b] absolute top-1 transition-transform ${userProfile?.isPaused ? 'translate-x-7' : 'translate-x-1'}`}></div>
                          </button>
                       </div>
 
@@ -1732,6 +1690,9 @@ export default function App() {
                        // Simulate network process to prevent instant close
                        setTimeout(async () => {
                          if(currentUser) {
+                            if (userProfile) {
+                               await saveUserProfile({ ...userProfile, isDeleted: true });
+                            }
                             await logout();
                          }
                          setCurrentUser(null);
@@ -1768,6 +1729,60 @@ export default function App() {
               <Loader2 className="w-10 h-10 animate-spin text-red-600" />
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50 text-center">Account deletion in progress...</h3>
               <p className="text-sm text-slate-700 dark:text-slate-300 text-center">Please wait while we remove your data.</p>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Pause Confirmation Dialog */}
+      <AnimatePresence>
+        {showPauseConfirmDialog && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowPauseConfirmDialog(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl overflow-hidden"
+            >
+              <div className="flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center text-red-600 dark:text-red-400">
+                  <Pause className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-50">Pause Account?</h3>
+                  <p className="text-slate-700 dark:text-slate-300 mt-2 text-sm">
+                    Are you sure you want to pause your account? Your profile will be hidden from everyone in the Connect section.
+                  </p>
+                </div>
+                <div className="flex gap-3 w-full mt-4">
+                  <button 
+                    onClick={() => setShowPauseConfirmDialog(false)}
+                    className="flex-1 py-2 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-50 font-medium rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={async () => {
+                       setShowPauseConfirmDialog(false);
+                       if (currentUser && userProfile) {
+                         const updated = { ...userProfile, isPaused: true };
+                         setUserProfile(updated);
+                         await saveUserProfile(updated);
+                       }
+                    }}
+                    className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition"
+                  >
+                    Pause
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
