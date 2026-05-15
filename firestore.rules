@@ -37,8 +37,9 @@ service cloud.firestore {
         && (!('darkMode' in data) || (data.darkMode is bool))
         && data.bio is string && data.bio.size() <= 2000
         && data.degree is string && data.degree.size() <= 1000
+        && (!('ugDegree' in data) || (data.ugDegree is string && data.ugDegree.size() <= 1000))
         && data.collegeName is string && data.collegeName.size() <= 1000
-        && data.experienceYears is number && data.experienceYears >= 0 && data.experienceYears <= 15
+        && data.experienceYears is number && data.experienceYears >= 0
         && (!('companyName' in data) || (data.companyName is string && data.companyName.size() <= 1000))
         && (!('role' in data) || (data.role is string && data.role.size() <= 1000))
         && (!('workExperiences' in data) || (data.workExperiences is list && data.workExperiences.size() <= 5))
@@ -78,7 +79,7 @@ service cloud.firestore {
         && incoming().uid == existing().uid
         && incoming().email == existing().email
         && (
-          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'collegeName', 'experienceYears', 'companyName', 'role', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'isPaused', 'isDeleted'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'companyName', 'role', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'isPaused', 'isDeleted'])
         );
     }
 

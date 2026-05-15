@@ -234,7 +234,6 @@ export default function App() {
       !profileForm.degree.trim() ||
       !profileForm.ugDegree.trim() ||
       !profileForm.collegeName.trim() ||
-      profileForm.experienceYears === undefined ||
       !profileForm.skills.trim() ||
       profileForm.competitionCount === undefined ||
       !profileForm.bio.trim()
@@ -243,16 +242,14 @@ export default function App() {
       return;
     }
 
-    if (profileForm.experienceYears > 0 && profileForm.workExperiences.length === 0) {
-       alert("Please add at least one work experience.");
-       return;
-    }
-
     const hasInvalidExp = profileForm.workExperiences.some(e => !e.company.trim() || !e.role.trim() || (e.durationYears === undefined && e.durationMonths === undefined && (!e.duration || !e.duration.trim())));
     if (hasInvalidExp) {
        alert("Please fill all fields in your work experiences.");
        return;
     }
+
+    const calculatedMonths = profileForm.workExperiences.reduce((sum, exp) => sum + ((exp.durationYears || 0) * 12) + (exp.durationMonths || 0), 0);
+    const calculatedExperienceYears = calculatedMonths > 0 ? parseFloat((calculatedMonths / 12).toFixed(2)) : 0;
 
     const profileData: Omit<UserProfile, 'createdAt'> = {
       uid: currentUser.uid,
@@ -264,9 +261,9 @@ export default function App() {
       degree: profileForm.degree,
       ugDegree: profileForm.ugDegree,
       collegeName: profileForm.collegeName,
-      experienceYears: profileForm.experienceYears,
-      companyName: profileForm.experienceYears > 0 ? profileForm.companyName : undefined,
-      role: profileForm.experienceYears > 0 ? profileForm.role : undefined,
+      experienceYears: calculatedExperienceYears,
+      companyName: calculatedExperienceYears > 0 ? profileForm.workExperiences[0]?.company : undefined,
+      role: calculatedExperienceYears > 0 ? profileForm.workExperiences[0]?.role : undefined,
       workExperiences: profileForm.workExperiences,
       competitionCount: Number(profileForm.competitionCount),
       bio: profileForm.bio
@@ -990,7 +987,7 @@ export default function App() {
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Full Name</label>
+                          <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Full Name <span className="text-red-500">*</span></label>
                           <input 
                             value={profileForm.displayName}
                             onChange={(e) => setProfileForm({...profileForm, displayName: e.target.value})}
@@ -1048,23 +1045,20 @@ export default function App() {
                         </div>
                       </div>
                       <div className="space-y-4">
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Total Work Experience (Years) <span className="text-red-500">*</span></label>
-                          <select
-                            value={profileForm.experienceYears}
-                            onChange={(e) => setProfileForm({...profileForm, experienceYears: parseInt(e.target.value) || 0})}
-                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50 [&>option]:bg-white dark:bg-[#09090b] [&>option]:text-slate-900 dark:text-slate-50"
-                          >
-                            {Array.from({ length: 16 }, (_, i) => (
-                              <option key={i} value={i}>{i} {i === 1 ? 'Year' : 'Years'}</option>
-                            ))}
-                          </select>
-                        </div>
-                        
-                        {profileForm.experienceYears > 0 && (
                           <div className="space-y-4 border border-slate-200 dark:border-slate-800 p-4 rounded-xl">
                             <div className="flex justify-between items-center">
-                              <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Work Experiences (Max 5)</label>
+                              <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">
+                                Work Experiences (Max 5)
+                                <span className="ml-2 lowercase font-normal italic text-slate-500 text-[10px]">
+                                  {(() => {
+                                    const totalMonths = profileForm.workExperiences.reduce((sum, exp) => sum + ((exp.durationYears || 0) * 12) + (exp.durationMonths || 0), 0);
+                                    if (totalMonths === 0) return '';
+                                    const years = Math.floor(totalMonths / 12);
+                                    const months = totalMonths % 12;
+                                    return `(Total: ${years > 0 ? `${years}y ` : ''}${months > 0 ? `${months}m` : ''})`;
+                                  })()}
+                                </span>
+                              </label>
                               {profileForm.workExperiences.length < 5 && (
                                 <button type="button" onClick={() => setProfileForm({...profileForm, workExperiences: [...profileForm.workExperiences, {company: '', role: '', durationYears: 0, durationMonths: 1}]})} className="text-xs text-red-600 font-bold hover:underline">
                                   + Add Experience
@@ -1092,10 +1086,9 @@ export default function App() {
                               <p className="text-sm text-slate-700 dark:text-slate-300 italic text-center py-2">Add at least one experience to get better visibility.</p>
                             )}
                           </div>
-                        )}
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Skills (Comma separated)</label>
+                        <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Skills (Comma separated) <span className="text-red-500">*</span></label>
                         <input 
                           value={profileForm.skills}
                           onChange={(e) => setProfileForm({...profileForm, skills: e.target.value})}
@@ -1104,7 +1097,7 @@ export default function App() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Case Competitions Done</label>
+                        <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Case Competitions Done <span className="text-red-500">*</span></label>
                         <input 
                           type="number" 
                           value={profileForm.competitionCount}
@@ -1114,7 +1107,7 @@ export default function App() {
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Bio</label>
+                        <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Bio <span className="text-red-500">*</span></label>
                         <textarea 
                           value={profileForm.bio}
                           onChange={(e) => setProfileForm({...profileForm, bio: e.target.value})}
@@ -1184,7 +1177,14 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Total Work Experience</h3>
-                        <p className="text-slate-900 dark:text-slate-50">{userProfile?.experienceYears !== undefined ? `${userProfile.experienceYears} ${userProfile.experienceYears === 1 ? 'Year' : 'Years'}` : '-'}</p>
+                        <p className="text-slate-900 dark:text-slate-50">{userProfile?.experienceYears !== undefined && userProfile.experienceYears > 0 ? (() => {
+                          const yrs = Math.floor(userProfile.experienceYears);
+                          const mos = Math.round((userProfile.experienceYears - yrs) * 12);
+                          let parts = [];
+                          if (yrs > 0) parts.push(`${yrs} Yr${yrs > 1 ? 's' : ''}`);
+                          if (mos > 0) parts.push(`${mos} Mo${mos > 1 ? 's' : ''}`);
+                          return parts.join(' ');
+                        })() : '-'}</p>
                       </div>
                       {userProfile?.experienceYears && userProfile.experienceYears > 0 && (!userProfile.workExperiences || userProfile.workExperiences.length === 0) ? (
                         <div>
