@@ -163,17 +163,64 @@ export const markMessagesAsRead = async (senderId: string, receiverId: string) =
   try {
     const q = query(
       collection(db, 'chats', chatId, 'messages'),
-      where('receiverId', '==', receiverId),
-      where('isRead', '==', false)
+      where('receiverId', '==', receiverId)
     );
     const snapshot = await getDocs(q);
     const batch = writeBatch(db);
+    let count = 0;
     snapshot.docs.forEach((messageDoc) => {
-      batch.update(messageDoc.ref, { isRead: true });
+      if (messageDoc.data().isRead !== true) {
+        batch.update(messageDoc.ref, { isRead: true });
+        count++;
+      }
     });
-    await batch.commit();
+    if (count > 0) {
+      await batch.commit();
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+};
+
+export const listenToAllReceivedMessages = (userId: string, callback: (messages: Message[]) => void) => {
+  const path = `messages`;
+  try {
+    const q = query(
+      collectionGroup(db, 'messages'),
+      where('receiverId', '==', userId)
+    );
+    return onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Message));
+      callback(messages);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, path);
+    });
+  } catch (err) {
+    return () => {};
+  }
+};
+
+export const listenToAllSentMessages = (userId: string, callback: (messages: Message[]) => void) => {
+  const path = `messages`;
+  try {
+    const q = query(
+      collectionGroup(db, 'messages'),
+      where('senderId', '==', userId)
+    );
+    return onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Message));
+      callback(messages);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, path);
+    });
+  } catch (err) {
+    return () => {};
   }
 };
 
@@ -182,11 +229,11 @@ export const listenToTotalUnreadMessages = (userId: string, callback: (count: nu
   try {
     const q = query(
       collectionGroup(db, 'messages'),
-      where('receiverId', '==', userId),
-      where('isRead', '==', false)
+      where('receiverId', '==', userId)
     );
     return onSnapshot(q, (snapshot) => {
-      callback(snapshot.docs.length);
+      const unreadCount = snapshot.docs.filter(doc => doc.data().isRead === false).length;
+      callback(unreadCount);
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, path);
     });
@@ -316,4 +363,43 @@ export const listenToMessageRequests = (userId: string, callback: (requests: Mes
   }, (error) => handleFirestoreError(error, OperationType.GET, path));
 
   return () => { unsub1(); unsub2(); };
+};
+
+export const reportUser = async (reporterId: string, reportedId: string, reason: string) => {
+  const path = 'reports';
+  try {
+    await addDoc(collection(db, 'reports'), {
+      reporterId,
+      reportedId,
+      reason,
+      status: 'pending',
+      createdAt: serverTimestamp()
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getAllReports = async (): Promise<any[]> => {
+  const path = 'reports';
+  try {
+    const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+export const updateReportStatus = async (reportId: string, status: 'pending' | 'reviewed') => {
+  const path = `reports/${reportId}`;
+  try {
+    const { updateDoc } = await import('firebase/firestore');
+    await updateDoc(doc(db, 'reports', reportId), {
+      status
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
 };

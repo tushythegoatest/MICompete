@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { UserProfile, Message } from '../types';
-import { MessageRequest } from '../services/firebaseService';
+import { UserProfile, Message, Report } from '../types';
+import { MessageRequest, getAllReports, updateReportStatus } from '../services/firebaseService';
 import { collection, getDocs, collectionGroup, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Users, MessageSquare, Activity, Loader2, X, AlertOctagon, PauseCircle, Trash2 } from 'lucide-react';
+import { Users, MessageSquare, Activity, Loader2, X, AlertOctagon, PauseCircle, Trash2, Flag } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminDashboard({ currentUser }: { currentUser: any }) {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [requests, setRequests] = useState<MessageRequest[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,6 +36,10 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
         const requestsSnapshot = await getDocs(collection(db, 'messageRequests'));
         const requestsData = requestsSnapshot.docs.map(doc => doc.data() as MessageRequest);
         setRequests(requestsData);
+
+        // Fetch reports
+        const fetchedReports = await getAllReports();
+        setReports(fetchedReports);
 
       } catch (error) {
         console.error("Error fetching admin data", error);
@@ -134,7 +139,7 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Recent Users */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
@@ -209,6 +214,64 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
             })}
             {messages.length === 0 && (
               <p className="text-sm text-slate-500 text-center py-8">No messages found.</p>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Reported Users */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4, delay: 0.5 }}
+          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-[500px] flex flex-col"
+        >
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Flag className="w-5 h-5 text-red-500" />
+              Reported Users
+            </h2>
+          </div>
+          <div className="overflow-y-auto flex-1 space-y-4 pr-2">
+            {reports.map((report, i) => {
+              const reporter = users.find(u => u.uid === report.reporterId);
+              const reported = users.find(u => u.uid === report.reportedId);
+              return (
+                <motion.div key={i} initial={{ opacity: 0, x: 10 }} whileInView={{ opacity: 1, x: 0 }} className={`p-4 rounded-xl border transition-colors ${report.status === 'pending' ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30' : 'bg-slate-50 dark:bg-[#27272a] border-slate-100 dark:border-slate-800'}`}>
+                  <div className="flex justify-between items-start mb-2">
+                     <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                        <button onClick={() => reported && setSelectedUser(reported)} className="hover:underline text-red-600 dark:text-red-400">
+                           {reported?.displayName || 'Unknown'}
+                        </button>
+                        <span className="text-slate-500 font-normal ml-1">reported by</span> {reporter?.displayName || 'Unknown'}
+                     </div>
+                     <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2 bg-white dark:bg-[#18181b] px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                       {report.status}
+                     </span>
+                  </div>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-[#18181b] p-2 rounded-lg border border-slate-100 dark:border-slate-800 font-medium italic">"{report.reason}"</p>
+                  
+                  {report.status === 'pending' && (
+                    <button 
+                      onClick={async () => {
+                        if (report.id) {
+                          await updateReportStatus(report.id, 'reviewed');
+                          setReports(reports.map(r => r.id === report.id ? { ...r, status: 'reviewed' } : r));
+                        }
+                      }}
+                      className="mt-3 text-xs w-full bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 py-2 rounded-lg font-bold hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors"
+                    >
+                      Mark as Reviewed
+                    </button>
+                  )}
+                </motion.div>
+              );
+            })}
+            {reports.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                <Flag className="w-8 h-8 mb-2 opacity-20" />
+                <p className="text-sm">No reports found.</p>
+              </div>
             )}
           </div>
         </motion.div>

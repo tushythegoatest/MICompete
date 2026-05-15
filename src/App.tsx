@@ -20,7 +20,9 @@ import {
   Trash2,
   Pause,
   Briefcase,
-  Shield
+  Shield,
+  Pencil,
+  Flag
 } from 'lucide-react';
 import { View, UserProfile, Competition, Message, Endorsement } from './types.ts';
 import { auth } from './lib/firebase.ts';
@@ -43,7 +45,10 @@ import {
   updateMessageRequestStatus,
   checkChatExists,
   listenToTotalUnreadMessages,
-  markMessagesAsRead
+  listenToAllReceivedMessages,
+  listenToAllSentMessages,
+  markMessagesAsRead,
+  reportUser
 } from './services/firebaseService.ts';
 
 export const formatNameForPrivacy = (currentUserUid: string | undefined, profileUid: string, rawName: string | undefined): string => {
@@ -56,6 +61,35 @@ export const formatNameForPrivacy = (currentUserUid: string | undefined, profile
   return parts[0];
 };
 
+export const formatTimeAgo = (date: any) => {
+  if (!date) return '';
+  const millis = typeof date.toMillis === 'function' ? date.toMillis() : new Date(date).getTime();
+  if (!millis || isNaN(millis)) return '';
+  const seconds = Math.floor((new Date().getTime() - millis) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
+
+export const formatMessageTime = (date: any) => {
+  if (!date) return '';
+  const millis = typeof date.toMillis === 'function' ? date.toMillis() : new Date(date).getTime();
+  if (!millis || isNaN(millis)) return '';
+  
+  const d = new Date(millis);
+  let hours = d.getHours();
+  const minutes = d.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12; // the hour '0' should be '12'
+  const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+  return hours + ':' + minutesStr + ' ' + ampm;
+};
+
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('home');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -66,6 +100,8 @@ export default function App() {
   const [activeChatUserIds, setActiveChatUserIds] = useState<string[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<UserProfile | null>(null);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
+  const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
+  const [sentMessages, setSentMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -97,6 +133,11 @@ export default function App() {
   const [selectedProfileModal, setSelectedProfileModal] = useState<UserProfile | null>(null);
   const [modalEndorsements, setModalEndorsements] = useState<Endorsement[]>([]);
 
+  // Report User Dialog
+  const [reportTarget, setReportTarget] = useState<{ userId: string, displayName: string } | null>(null);
+  const [reportReason, setReportReason] = useState('');
+  const [isReportingSubmitting, setIsReportingSubmitting] = useState(false);
+
   const DEFAULT_PROFILE_FORM = {
     displayName: '',
     photoURL: '',
@@ -105,6 +146,7 @@ export default function App() {
     ugDegree: '',
     collegeName: '',
     experienceYears: 0,
+    isFresher: false,
     companyName: '',
     role: '',
     workExperiences: [] as {company: string, role: string, duration?: string, durationYears?: number, durationMonths?: number}[],
@@ -119,8 +161,10 @@ export default function App() {
   const [showProfileSavedSplash, setShowProfileSavedSplash] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [showSignOutConfirmDialog, setShowSignOutConfirmDialog] = useState(false);
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
   const [showDeleteProgressDialog, setShowDeleteProgressDialog] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [showPauseConfirmDialog, setShowPauseConfirmDialog] = useState(false);
 
   useEffect(() => {
@@ -147,6 +191,7 @@ export default function App() {
             ugDegree: profile.ugDegree || '',
             collegeName: profile.collegeName || '',
             experienceYears: profile.experienceYears || 0,
+            isFresher: profile.isFresher || false,
             companyName: profile.companyName || '',
             role: profile.role || '',
             workExperiences: profile.workExperiences || [],
@@ -190,6 +235,7 @@ export default function App() {
         const hasUnread = msgs.some(m => m.receiverId === currentUser.uid && !m.isRead);
         if (hasUnread) {
           markMessagesAsRead(selectedPartner.uid, currentUser.uid);
+          setReceivedMessages(prev => prev.map(m => m.senderId === selectedPartner.uid ? { ...m, isRead: true } : m));
         }
       });
     } else {
@@ -201,6 +247,8 @@ export default function App() {
   useEffect(() => {
     let unsubscribeReqs: (() => void) | undefined;
     let unsubscribeUnread: (() => void) | undefined;
+    let unsubscribeReceived: (() => void) | undefined;
+    let unsubscribeSent: (() => void) | undefined;
     if (currentUser) {
       unsubscribeReqs = listenToMessageRequests(currentUser.uid, (requests) => {
         setMessageRequests(requests);
@@ -208,10 +256,18 @@ export default function App() {
       unsubscribeUnread = listenToTotalUnreadMessages(currentUser.uid, (count) => {
         setTotalUnreadMessages(count);
       });
+      unsubscribeReceived = listenToAllReceivedMessages(currentUser.uid, (msgs) => {
+        setReceivedMessages(msgs);
+      });
+      unsubscribeSent = listenToAllSentMessages(currentUser.uid, (msgs) => {
+        setSentMessages(msgs);
+      });
     }
     return () => {
       unsubscribeReqs?.();
       unsubscribeUnread?.();
+      unsubscribeReceived?.();
+      unsubscribeSent?.();
     };
   }, [currentUser]);
 
@@ -257,13 +313,14 @@ export default function App() {
       return;
     }
 
-    const hasInvalidExp = profileForm.workExperiences.some(e => !e.company.trim() || !e.role.trim() || (e.durationYears === undefined && e.durationMonths === undefined && (!e.duration || !e.duration.trim())));
+    const validWorkExperiences = profileForm.workExperiences.filter(e => e.company.trim() || e.role.trim());
+    const hasInvalidExp = validWorkExperiences.some(e => !e.company.trim() || !e.role.trim());
     if (hasInvalidExp) {
-       setProfileError("Please fill all fields in your work experiences.");
+       setProfileError("Please fill both Company and Role for all work experiences, or remove empty ones.");
        return;
     }
 
-    const calculatedMonths = profileForm.workExperiences.reduce((sum, exp) => sum + ((exp.durationYears || 0) * 12) + (exp.durationMonths || 0), 0);
+    const calculatedMonths = validWorkExperiences.reduce((sum, exp) => sum + ((exp.durationYears || 0) * 12) + (exp.durationMonths || 0), 0);
     const calculatedExperienceYears = calculatedMonths > 0 ? parseFloat((calculatedMonths / 12).toFixed(2)) : 0;
 
     const profileData: Omit<UserProfile, 'createdAt'> = {
@@ -276,10 +333,11 @@ export default function App() {
       degree: profileForm.degree,
       ugDegree: profileForm.ugDegree,
       collegeName: profileForm.collegeName,
-      experienceYears: calculatedExperienceYears,
-      companyName: calculatedExperienceYears > 0 ? profileForm.workExperiences[0]?.company : undefined,
-      role: calculatedExperienceYears > 0 ? profileForm.workExperiences[0]?.role : undefined,
-      workExperiences: profileForm.workExperiences,
+      experienceYears: profileForm.isFresher ? 0 : calculatedExperienceYears,
+      isFresher: profileForm.isFresher,
+      companyName: (!profileForm.isFresher && calculatedExperienceYears > 0) ? validWorkExperiences[0]?.company : undefined,
+      role: (!profileForm.isFresher && calculatedExperienceYears > 0) ? validWorkExperiences[0]?.role : undefined,
+      workExperiences: profileForm.isFresher ? [] : validWorkExperiences,
       competitionCount: Number(profileForm.competitionCount),
       bio: profileForm.bio
     };
@@ -299,8 +357,9 @@ export default function App() {
       setIsEditingProfile(false);
       setShowProfileSavedSplash(true);
       setTimeout(() => setShowProfileSavedSplash(false), 2500);
-    } catch (err) {
-      setProfileError("Failed to save profile. Check console for details.");
+    } catch (err: any) {
+      console.error("Profile save error:", err);
+      setProfileError(`Failed to save: ${err.message || 'Check console'}`);
     }
   };
 
@@ -391,10 +450,37 @@ export default function App() {
     ] : []),
   ];
 
+  const handleSignOut = async () => {
+    setIsSigningOut(true);
+    setTimeout(async () => {
+      await logout();
+      setCurrentUser(null);
+      setUserProfile(null);
+      setCurrentView('home');
+      setIsSigningOut(false);
+    }, 1920);
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white dark:bg-[#09090b]">
         <Loader2 className="w-10 h-10 animate-spin text-red-600 dark:text-red-500" />
+      </div>
+    );
+  }
+
+  if (isSigningOut) {
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white dark:bg-[#09090b]">
+        <motion.div
+           initial={{ opacity: 0, scale: 0.9 }}
+           animate={{ opacity: 1, scale: 1 }}
+           className="flex flex-col items-center gap-6"
+        >
+          <Loader2 className="w-12 h-12 text-red-600 animate-spin" />
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Signing out...</h2>
+          <p className="text-slate-600 dark:text-slate-400">You are now being signed out. Please wait.</p>
+        </motion.div>
       </div>
     );
   }
@@ -422,17 +508,17 @@ export default function App() {
             </button>
 
             {/* Desktop Nav */}
-            <div className="hidden md:flex items-center space-x-4 lg:space-x-8">
+            <div className="hidden md:flex items-center space-x-6 lg:space-x-12">
               {navItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setCurrentView(item.id as View)}
-                  className={`relative flex items-center gap-1.5 lg:gap-2 text-xs lg:text-sm font-medium transition-colors ${
+                  className={`relative flex items-center gap-2 lg:gap-3 text-sm lg:text-base font-semibold transition-colors ${
                     currentView === item.id ? 'text-red-600 border-b-2 border-red-600 pb-1 mt-1' : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50 pb-1 mt-1'
                   }`}
                 >
                   <div className="relative flex items-center justify-center">
-                    <item.icon className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
+                    <item.icon className="w-4 h-4 lg:w-5 lg:h-5" />
                     {item.hasNotification && (
                       <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-600 rounded-full animate-pulse border-2 border-white dark:border-[#09090b] box-content"></span>
                     )}
@@ -505,7 +591,7 @@ export default function App() {
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative z-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-32 md:pb-8 relative z-10">
         <AnimatePresence mode="wait">
           {currentView === 'home' && (
             <motion.div
@@ -697,8 +783,8 @@ export default function App() {
                       <div className="w-10 h-10 bg-slate-100 dark:bg-[#27272a] rounded-xl flex items-center justify-center mb-4 text-red-600">
                         <Search className="w-5 h-5" />
                       </div>
-                      <h3 className="font-bold text-lg mb-2 text-slate-900 dark:text-slate-50">Smart Search</h3>
-                      <p className="text-slate-700 dark:text-slate-300 text-sm">We crawl Unstop and Mettl so you don't have to. Real-time updates on active competitions.</p>
+                      <h3 className="font-bold text-lg mb-2 text-slate-900 dark:text-slate-50">Direct Host Connection</h3>
+                      <p className="text-slate-700 dark:text-slate-300 text-sm">Connect directly with the platforms where events are hosted. Seamlessly jump to the action.</p>
                     </motion.div>
                     <motion.div 
                       initial={{ opacity: 0, y: 30 }}
@@ -729,6 +815,9 @@ export default function App() {
                   </div>
                 </div>
               )}
+              <div className="mt-16 pb-8 text-center text-sm text-slate-500 dark:text-slate-400 font-medium">
+                Developed by tushythegoatest. All wrongs reserved.
+              </div>
             </motion.div>
           )}
 
@@ -876,7 +965,7 @@ export default function App() {
                 </div>
               </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {getFilteredTeammates().map((tm, idx) => (
                     <motion.div 
                       key={tm.uid} 
@@ -906,22 +995,22 @@ export default function App() {
                         <p className="text-xs text-slate-700 dark:text-slate-300 mb-0.5 font-medium uppercase tracking-wide truncate">{tm.degree || 'Current Program'}</p>
                         <p className="text-xs text-slate-700 dark:text-slate-300 mb-4 font-medium uppercase tracking-wide truncate">{tm.ugDegree || 'UG Degree'}{tm.collegeName ? ` @ ${tm.collegeName}` : ''}</p>
                         
-                        {tm.experienceYears && tm.experienceYears > 0 ? (
+                        {(tm.isFresher || !tm.experienceYears || tm.experienceYears === 0) ? (
+                          <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium tracking-wide mb-4 bg-slate-100 dark:bg-[#27272a] py-1 px-3 rounded-full w-fit mx-auto">
+                             <Briefcase className="w-3.5 h-3.5" /> Fresher
+                          </div>
+                        ) : (
                           <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium tracking-wide mb-4 bg-slate-100 dark:bg-[#27272a] py-1 px-3 rounded-full w-fit mx-auto truncate max-w-[80%]">
                              <Briefcase className="w-3.5 h-3.5" /> 
                              {(() => {
-                                const yrs = Math.floor(tm.experienceYears);
-                                const mos = Math.round((tm.experienceYears - yrs) * 12);
+                                const yrs = Math.floor(tm.experienceYears!);
+                                const mos = Math.round((tm.experienceYears! - yrs) * 12);
                                 let parts = [];
                                 if (yrs > 0) parts.push(`${yrs} Yr${yrs > 1 ? 's' : ''}`);
                                 if (mos > 0) parts.push(`${mos} Mo${mos > 1 ? 's' : ''}`);
                                 return parts.join(' ');
                              })()}
                              {tm.role && tm.companyName && <span className="opacity-75 md:inline hidden truncate"> - {tm.role} @ {tm.companyName}</span>}
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium tracking-wide mb-4 bg-slate-100 dark:bg-[#27272a] py-1 px-3 rounded-full w-fit mx-auto">
-                             <Briefcase className="w-3.5 h-3.5" /> Fresher
                           </div>
                         )}
                         
@@ -938,10 +1027,10 @@ export default function App() {
                           )}
                         </div>
 
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-stretch justify-between gap-3">
                           <button 
                             onClick={() => openProfileModal(tm)}
-                            className="flex-1 bg-slate-50 dark:bg-[#18181b] text-slate-900 dark:text-slate-50 py-2 rounded-lg text-sm font-bold hover:bg-slate-100 dark:bg-[#27272a] transition-colors border border-slate-200 dark:border-slate-800"
+                            className="flex-1 bg-slate-50 dark:bg-[#18181b] text-slate-900 dark:text-slate-50 px-2 py-2.5 rounded-lg text-sm font-bold hover:bg-slate-100 dark:bg-[#27272a] transition-colors border border-slate-200 dark:border-slate-800 flex items-center justify-center leading-tight"
                           >
                             View Profile
                           </button>
@@ -955,7 +1044,7 @@ export default function App() {
                                       await sendMessageRequest(currentUser.uid, tm.uid);
                                     }
                                   }}
-                                  className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
+                                  className="flex-1 bg-red-600 text-white px-2 py-2.5 rounded-lg text-sm font-bold hover:bg-red-500 transition-colors flex items-center justify-center gap-2 leading-tight"
                                 >
                                   <Network className="w-4 h-4" /> Connect
                                 </button>
@@ -964,15 +1053,15 @@ export default function App() {
                               if (!reqStatus.isSender) {
                                  return (
                                    <div className="flex-1 flex gap-1">
-                                     <button onClick={() => updateMessageRequestStatus(reqStatus.req.id, 'accepted')} className="flex-1 bg-green-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-green-500 transition-colors">Accept</button>
-                                     <button onClick={() => updateMessageRequestStatus(reqStatus.req.id, 'rejected')} className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-2 rounded-lg text-xs font-bold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors">Reject</button>
+                                     <button onClick={() => updateMessageRequestStatus(reqStatus.req.id, 'accepted')} className="flex-1 bg-green-600 text-white px-1 py-2.5 rounded-lg text-xs font-bold hover:bg-green-500 transition-colors leading-tight">Accept</button>
+                                     <button onClick={() => updateMessageRequestStatus(reqStatus.req.id, 'rejected')} className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1 py-2.5 rounded-lg text-xs font-bold hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors leading-tight">Reject</button>
                                    </div>
                                  );
                               }
                               return (
                                 <button 
                                   disabled
-                                  className="flex-1 bg-slate-200 dark:bg-[#27272a] text-slate-500 dark:text-slate-400 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2"
+                                  className="flex-1 bg-slate-200 dark:bg-[#27272a] text-slate-500 dark:text-slate-400 px-2 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 leading-tight"
                                 >
                                   Requested
                                 </button>
@@ -984,7 +1073,7 @@ export default function App() {
                                     setSelectedPartner(tm);
                                     setCurrentView('chat');
                                   }}
-                                  className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-bold hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
+                                  className="flex-1 bg-red-600 text-white px-2 py-2.5 rounded-lg text-sm font-bold hover:bg-red-500 transition-colors flex items-center justify-center gap-2 leading-tight"
                                 >
                                   <MessageSquare className="w-4 h-4" /> Message
                                 </button>
@@ -1091,11 +1180,17 @@ export default function App() {
                        )}
                      </div>
                      {isEditingProfile && (
-                       <label className="absolute inset-0 bg-black/40 text-white rounded-3xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity">
-                         <Plus className="w-6 h-6 mb-1" />
-                         <span className="text-[10px] font-bold">Upload</span>
-                         <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                       </label>
+                       <>
+                         <label className="absolute inset-0 bg-black/40 text-white rounded-3xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer transition-opacity z-10">
+                           <Plus className="w-6 h-6 mb-1" />
+                           <span className="text-[10px] font-bold">Upload</span>
+                           <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                         </label>
+                         <label className="absolute -bottom-2 -right-2 bg-red-600 border-[3px] border-white dark:border-[#18181b] text-white p-2 rounded-full cursor-pointer shadow-lg hover:bg-red-700 transition-colors z-20">
+                           <Pencil className="w-3.5 h-3.5" />
+                           <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                         </label>
+                       </>
                      )}
                    </div>
                    <div className="flex-1 flex justify-between items-start">
@@ -1173,12 +1268,32 @@ export default function App() {
                           />
                         </div>
                       </div>
+
+                      <div className="flex items-center gap-2 mt-4">
+                        <input
+                          type="checkbox"
+                          id="isFresher"
+                          checked={profileForm.isFresher}
+                          onChange={(e) => setProfileForm({ ...profileForm, isFresher: e.target.checked })}
+                          className="w-4 h-4 text-red-600 bg-slate-100 border-slate-300 rounded focus:ring-red-500 dark:focus:ring-red-600 dark:ring-offset-slate-800 focus:ring-2 dark:bg-slate-700 dark:border-slate-600"
+                        />
+                        <label htmlFor="isFresher" className="text-sm font-medium text-slate-900 dark:text-slate-50">I am a fresher</label>
+                      </div>
+
                       <div className="space-y-4">
-                          <div className="space-y-4 border border-slate-200 dark:border-slate-800 p-4 rounded-xl">
-                            <div className="flex justify-between items-center">
-                              <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">
-                                Work Experiences (Max 5)
-                                <span className="ml-2 lowercase font-normal italic text-slate-500 text-[10px]">
+                        {!profileForm.isFresher && (
+                          <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true }}
+                            className="space-y-4 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl relative overflow-hidden bg-white/50 dark:bg-[#09090b]/50 shadow-sm transition-shadow hover:shadow-md"
+                          >
+                            <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-red-500/50 to-transparent"></div>
+                            <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-3 sm:gap-0">
+                              <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 flex flex-wrap items-center gap-2">
+                                <Briefcase className="w-4 h-4 text-red-500 shrink-0" />
+                                <span>Work Experiences (Max 5)</span>
+                                <span className="lowercase font-normal italic text-slate-500 text-[10px]">
                                   {(() => {
                                     const totalMonths = profileForm.workExperiences.reduce((sum, exp) => sum + ((exp.durationYears || 0) * 12) + (exp.durationMonths || 0), 0);
                                     if (totalMonths === 0) return '';
@@ -1189,32 +1304,45 @@ export default function App() {
                                 </span>
                               </label>
                               {profileForm.workExperiences.length < 5 && (
-                                <button type="button" onClick={() => setProfileForm({...profileForm, workExperiences: [...profileForm.workExperiences, {company: '', role: '', durationYears: 0, durationMonths: 1}]})} className="text-xs text-red-600 font-bold hover:underline">
-                                  + Add Experience
+                                <button type="button" onClick={() => setProfileForm({...profileForm, workExperiences: [...profileForm.workExperiences, {company: '', role: '', durationYears: 0, durationMonths: 0}]})} className="text-xs bg-red-50 dark:bg-red-500/10 text-red-600 px-3 py-1.5 rounded-lg font-bold hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors flex items-center gap-1 shrink-0">
+                                  <Plus className="w-3.5 h-3.5" /> Add Experience
                                 </button>
                               )}
                             </div>
-                            {profileForm.workExperiences.map((exp, idx) => (
-                              <div key={idx} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-start bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-800 relative group">
-                                <input placeholder="Company" value={exp.company} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, company: e.target.value} : we)})} className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-50" />
-                                <input placeholder="Role" value={exp.role} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, role: e.target.value} : we)})} className="w-full bg-white dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-50" />
-                                <div className="flex gap-2 w-full">
-                                  <select value={exp.durationYears ?? 0} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, durationYears: parseInt(e.target.value)} : we)})} className="w-1/2 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-2 text-sm text-slate-900 dark:text-slate-50">
-                                    {Array.from({length: 16}, (_, i) => <option key={i} value={i}>{i} Yrs</option>)}
-                                  </select>
-                                  <select value={exp.durationMonths ?? 0} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, durationMonths: parseInt(e.target.value)} : we)})} className="w-1/2 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-2 text-sm text-slate-900 dark:text-slate-50">
-                                    {Array.from({length: 12}, (_, i) => <option key={i} value={i}>{i} Mos</option>)}
-                                  </select>
-                                </div>
-                                <button type="button" onClick={() => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.filter((_, i) => i !== idx)})} className="absolute -top-2 -right-2 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 w-6 h-6 rounded-full flex items-center justify-center shadow-sm text-xs border border-red-200 dark:border-red-800/40 hover:bg-red-200 dark:hover:bg-red-900/60 transition-colors">
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ))}
+                            <div className="space-y-3 relative pl-4 before:absolute before:inset-y-0 before:left-1 before:w-px before:bg-slate-200 dark:before:bg-slate-800">
+                              <AnimatePresence>
+                                {profileForm.workExperiences.map((exp, idx) => (
+                                  <motion.div 
+                                    key={idx} 
+                                    initial={{ opacity: 0, x: -20, scale: 0.95 }}
+                                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95, height: 0, marginBottom: 0 }}
+                                    transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                                    className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start bg-slate-50 dark:bg-[#18181b] p-5 mt-2 sm:mt-0 rounded-xl border border-slate-200 dark:border-slate-800 relative group overflow-visible shadow-sm"
+                                  >
+                                    <div className="absolute -left-[17px] top-4 w-3.5 h-3.5 rounded-full bg-white dark:bg-[#09090b] border-2 border-red-400 z-10 transition-transform group-hover:scale-125"></div>
+                                    <input placeholder="Company" value={exp.company} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, company: e.target.value} : we)})} className="w-full bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50 placeholder-slate-400" />
+                                    <input placeholder="Role" value={exp.role} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, role: e.target.value} : we)})} className="w-full bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50 placeholder-slate-400" />
+                                    <div className="flex gap-2 w-full">
+                                      <select value={exp.durationYears ?? 0} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, durationYears: parseInt(e.target.value)} : we)})} className="w-1/2 bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-2 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50">
+                                        {Array.from({length: 16}, (_, i) => <option key={i} value={i}>{i} Yrs</option>)}
+                                      </select>
+                                      <select value={exp.durationMonths ?? 0} onChange={(e) => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.map((we, i) => i === idx ? {...we, durationMonths: parseInt(e.target.value)} : we)})} className="w-1/2 bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-2 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50">
+                                        {Array.from({length: 12}, (_, i) => <option key={i} value={i}>{i} Mos</option>)}
+                                      </select>
+                                    </div>
+                                    <button type="button" onClick={() => setProfileForm({...profileForm, workExperiences: profileForm.workExperiences.filter((_, i) => i !== idx)})} className="absolute -top-2.5 -right-2.5 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 w-7 h-7 rounded-full flex items-center justify-center shadow-lg hover:shadow-xl text-xs border-2 border-white dark:border-[#18181b] hover:bg-red-200 dark:hover:bg-red-900/60 transition-all hover:scale-110 z-20">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </motion.div>
+                                ))}
+                              </AnimatePresence>
+                            </div>
                             {profileForm.workExperiences.length === 0 && (
-                              <p className="text-sm text-slate-700 dark:text-slate-300 italic text-center py-2">Add at least one experience to get better visibility.</p>
+                              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-slate-500 dark:text-slate-400 italic text-center py-4 bg-slate-50 dark:bg-[#18181b] rounded-xl border border-dashed border-slate-200 dark:border-slate-800">Add at least one experience to get better visibility.</motion.p>
                             )}
-                          </div>
+                          </motion.div>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Skills (Comma separated) <span className="text-red-500">*</span></label>
@@ -1265,6 +1393,7 @@ export default function App() {
                               ugDegree: userProfile.ugDegree || '',
                               collegeName: userProfile.collegeName || '',
                               experienceYears: userProfile.experienceYears || 0,
+                              isFresher: userProfile.isFresher || false,
                               companyName: userProfile.companyName || '',
                               role: userProfile.role || '',
                               skills: userProfile.skills?.join(', ') || '',
@@ -1287,7 +1416,7 @@ export default function App() {
                   </>
                 ) : (
                   <div className="space-y-6">
-                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-4">
                       <div>
                         <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Full Name</h3>
                         <p className="text-slate-900 dark:text-slate-50">{userProfile?.displayName}</p>
@@ -1297,7 +1426,7 @@ export default function App() {
                         <p className="text-slate-900 dark:text-slate-50">{userProfile?.gender || '-'}</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-4">
                       <div>
                         <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Current Program</h3>
                         <p className="text-slate-900 dark:text-slate-50">{userProfile?.degree || '-'}</p>
@@ -1311,19 +1440,19 @@ export default function App() {
                         <p className="text-slate-900 dark:text-slate-50">{userProfile?.ugDegree || '-'}</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-4">
                       <div>
                         <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Total Work Experience</h3>
-                        <p className="text-slate-900 dark:text-slate-50">{userProfile?.experienceYears !== undefined && userProfile.experienceYears > 0 ? (() => {
+                        <p className="text-slate-900 dark:text-slate-50">{userProfile?.isFresher ? 'Fresher' : (userProfile?.experienceYears !== undefined && userProfile.experienceYears > 0 ? (() => {
                           const yrs = Math.floor(userProfile.experienceYears);
                           const mos = Math.round((userProfile.experienceYears - yrs) * 12);
                           let parts = [];
                           if (yrs > 0) parts.push(`${yrs} Yr${yrs > 1 ? 's' : ''}`);
                           if (mos > 0) parts.push(`${mos} Mo${mos > 1 ? 's' : ''}`);
                           return parts.join(' ');
-                        })() : '-'}</p>
+                        })() : 'Fresher')}</p>
                       </div>
-                      {userProfile?.experienceYears && userProfile.experienceYears > 0 && (!userProfile.workExperiences || userProfile.workExperiences.length === 0) ? (
+                      {!userProfile?.isFresher && userProfile?.experienceYears && userProfile.experienceYears > 0 && (!userProfile.workExperiences || userProfile.workExperiences.length === 0) ? (
                         <div>
                           <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Role @ Company</h3>
                           <p className="text-slate-900 dark:text-slate-50">{userProfile?.role} @ {userProfile?.companyName}</p>
@@ -1332,33 +1461,45 @@ export default function App() {
                     </div>
                     
                     {userProfile?.workExperiences && userProfile.workExperiences.length > 0 && (
-                      <div>
-                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-2">Work Experiences</h3>
-                        <div className="space-y-3 relative before:absolute before:inset-y-0 before:left-1.5 before:w-px before:bg-slate-200 pl-6">
+                      <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        className="mt-6"
+                      >
+                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-4">Work Experiences</h3>
+                        <div className="space-y-6 relative before:absolute before:inset-y-0 before:left-[11px] before:w-px before:bg-gradient-to-b before:from-slate-200 before:via-slate-200 before:to-transparent dark:before:from-slate-800 dark:before:via-slate-800 before:opacity-50 pl-8">
                           {userProfile.workExperiences.map((exp, idx) => (
-                             <div key={idx} className="relative">
                              <motion.div 
-                               initial={{ scale: 0 }}
-                               whileInView={{ scale: 1 }}
-                               viewport={{ once: true }}
-                               transition={{ type: "spring", bounce: 0.5, delay: idx * 0.1 }}
-                               className="absolute -left-[31px] top-0.5 w-5 h-5 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center border border-red-200 dark:border-red-800/50 shadow-sm"
+                               key={idx} 
+                               initial={{ opacity: 0, x: -20 }}
+                               whileInView={{ opacity: 1, x: 0 }}
+                               viewport={{ once: true, margin: "-50px" }}
+                               transition={{ delay: idx * 0.15, type: 'spring', damping: 20, stiffness: 100 }}
+                               className="relative group cursor-default"
                              >
-                               <div className="w-2 h-2 bg-red-600 dark:bg-red-500 rounded-full"></div>
-                             </motion.div>
-                               <div className="font-bold text-slate-900 dark:text-slate-50 text-sm">{exp.role}</div>
-                               <div className="text-slate-700 dark:text-slate-300 text-sm">{exp.company}</div>
-                               {(exp.durationYears !== undefined || exp.durationMonths !== undefined || exp.duration) && (
-                                 <div className="text-slate-400 text-xs mt-0.5">
-                                   {exp.durationYears !== undefined || exp.durationMonths !== undefined 
-                                     ? `${exp.durationYears || 0} Yrs ${exp.durationMonths || 0} Mos` 
-                                     : exp.duration}
+                               <div className="absolute -left-[37px] top-1 w-6 h-6 bg-slate-50 dark:bg-[#18181b] rounded-full flex items-center justify-center border border-slate-200 dark:border-slate-800 group-hover:border-red-500/50 dark:group-hover:border-red-500/50 transition-colors shadow-sm z-10">
+                                 <div className="w-2 h-2 bg-slate-300 dark:bg-slate-700 rounded-full group-hover:bg-red-500 transition-colors group-hover:scale-125 duration-300"></div>
+                               </div>
+                               <div className="bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm hover:shadow-md transition-all group-hover:-translate-y-0.5">
+                                 <div className="flex flex-col md:flex-row md:justify-between items-start gap-2 md:gap-4">
+                                   <div>
+                                     <div className="font-bold text-slate-900 dark:text-slate-50 text-base">{exp.role}</div>
+                                     <div className="text-red-600 dark:text-red-400 font-medium text-sm mt-0.5">{exp.company}</div>
+                                   </div>
+                                   {(exp.durationYears !== undefined || exp.durationMonths !== undefined || exp.duration) && (
+                                     <div className="text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wider uppercase whitespace-nowrap">
+                                       {exp.durationYears !== undefined || exp.durationMonths !== undefined 
+                                         ? `${exp.durationYears || 0} Y ${exp.durationMonths || 0} M` 
+                                         : exp.duration}
+                                     </div>
+                                   )}
                                  </div>
-                               )}
-                             </div>
+                               </div>
+                             </motion.div>
                           ))}
                         </div>
-                      </div>
+                      </motion.div>
                     )}
                     <div>
                       <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-2">Skills</h3>
@@ -1430,12 +1571,7 @@ export default function App() {
 
                       <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-slate-200 dark:border-[#27272a]">
                         <button 
-                          onClick={async () => { 
-                            await logout();
-                            setCurrentUser(null); 
-                            setUserProfile(null); 
-                            setCurrentView('home'); 
-                          }}
+                          onClick={() => setShowSignOutConfirmDialog(true)}
                           className="flex-1 py-3 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#18181b] transition-colors flex items-center justify-center gap-2"
                         >
                           <LogOut className="w-4 h-4"/> Sign Out
@@ -1462,37 +1598,74 @@ export default function App() {
               className="h-[calc(100vh-12rem)] flex bg-slate-50 dark:bg-[#18181b] backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xl"
             >
               {/* Contacts Sidebar */}
-              <div className="w-80 border-r border-slate-200 dark:border-slate-800 hidden md:block">
+              <div className={`w-full md:w-80 border-r border-slate-200 dark:border-slate-800 ${selectedPartner ? 'hidden md:block' : 'block'}`}>
                  <div className="p-6 border-b border-slate-200 dark:border-slate-800">
                     <h3 className="font-bold text-black dark:text-slate-50">Connections & Requests</h3>
                  </div>
-                 <div className="overflow-y-auto h-full pb-16">
+                 <div className="overflow-y-auto h-full pb-32">
                     {allTeammates.filter(t => {
                       const req = getRequestStatus(t.uid);
                       const hasActiveChat = activeChatUserIds.includes(t.uid);
                       
                       if (!req) return hasActiveChat; 
                       return req.status === 'accepted' || (!req.isSender && req.status === 'pending') || hasActiveChat;
-                    }).map(t => (
+                    }).map(t => {
+                      const chatMsgs = [
+                        ...receivedMessages.filter(m => m.senderId === t.uid),
+                        ...sentMessages.filter(m => m.receiverId === t.uid)
+                      ];
+                      const latestMessage = chatMsgs.length > 0 ? chatMsgs.sort((a, b) => {
+                        const timeA = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : new Date(a.createdAt).getTime();
+                        const timeB = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : new Date(b.createdAt).getTime();
+                        return timeB - timeA;
+                      })[0] : null;
+                      
+                      const receivedFromT = receivedMessages.filter(m => m.senderId === t.uid);
+                      const latestReceivedMessage = receivedFromT.length > 0 ? receivedFromT.sort((a, b) => {
+                        const timeA = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : new Date(a.createdAt).getTime();
+                        const timeB = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : new Date(b.createdAt).getTime();
+                        return timeB - timeA;
+                      })[0] : null;
+                      
+                      const hasUnread = receivedFromT.some(m => m.isRead !== true);
+                      const latestMillis = latestMessage ? (typeof latestMessage.createdAt?.toMillis === 'function' ? latestMessage.createdAt.toMillis() : new Date(latestMessage.createdAt).getTime()) : 0;
+                      return { t, latestMessage, hasUnread, latestMillis };
+                    }).sort((a, b) => b.latestMillis - a.latestMillis).map(({ t, latestMessage, hasUnread }) => {
+                      const timeAgoLabel = latestMessage ? formatTimeAgo(latestMessage.createdAt) : null;
+                      const isConnectionPending = getRequestStatus(t.uid)?.status === 'pending' && !getRequestStatus(t.uid)?.isSender;
+
+                      return (
                       <button 
                         key={t.uid} 
                         onClick={() => setSelectedPartner(t)}
                         className={`w-full p-4 flex items-center justify-between gap-3 hover:bg-slate-50 dark:bg-[#18181b] transition-colors ${selectedPartner?.uid === t.uid ? 'bg-slate-100 dark:bg-[#27272a] border-r-2 border-red-500' : ''}`}
                       >
-                         <div className="flex items-center gap-3">
-                           <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 overflow-hidden shrink-0 text-xs flex items-center justify-center font-bold text-black dark:text-slate-50">
-                             {t.photoURL ? <img src={t.photoURL} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : formatNameForPrivacy(currentUser?.uid, t.uid, t.displayName)?.[0]}
+                         <div className="flex items-center gap-3 w-full overflow-hidden">
+                           <div className="relative">
+                             <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 overflow-hidden shrink-0 text-xs flex items-center justify-center font-bold text-black dark:text-slate-50">
+                               {t.photoURL ? <img src={t.photoURL} referrerPolicy="no-referrer" className="w-full h-full object-cover" /> : formatNameForPrivacy(currentUser?.uid, t.uid, t.displayName)?.[0]}
+                             </div>
+                             {hasUnread && (
+                               <div className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white dark:border-[#18181b] rounded-full"></div>
+                             )}
                            </div>
-                           <div className="text-left">
-                              <div className="font-bold text-sm text-black dark:text-slate-50">{formatNameForPrivacy(currentUser?.uid, t.uid, t.displayName)}</div>
-                              <div className="text-xs text-black dark:text-slate-300 truncate w-32">{t.degree || 'Current Program'}</div>
+                           <div className="text-left flex-1 min-w-0">
+                              <div className="font-bold text-sm text-black dark:text-slate-50 truncate w-full">{formatNameForPrivacy(currentUser?.uid, t.uid, t.displayName)}</div>
+                              <div className="text-xs text-black dark:text-slate-400 truncate w-full">{hasUnread ? <span className="font-bold text-red-600 dark:text-red-400">New message</span> : t.degree || 'Current Program'}</div>
                            </div>
                          </div>
-                         {getRequestStatus(t.uid)?.status === 'pending' && !getRequestStatus(t.uid)?.isSender && (
-                           <div className="w-2 h-2 bg-red-500 rounded-full shrink-0 animate-pulse"></div>
-                         )}
+                         <div className="flex flex-col items-end shrink-0 gap-1">
+                           {timeAgoLabel && (
+                             <span className={`text-[10px] font-bold ${hasUnread ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-500 font-normal'}`}>
+                               {timeAgoLabel}
+                             </span>
+                           )}
+                           {isConnectionPending && (
+                             <div className="w-2 h-2 bg-red-500 rounded-full shrink-0 animate-pulse mt-1"></div>
+                           )}
+                         </div>
                       </button>
-                    ))}
+                    )})}
                     {allTeammates.filter(t => {
                       const req = getRequestStatus(t.uid);
                       const hasActiveChat = activeChatUserIds.includes(t.uid);
@@ -1503,7 +1676,7 @@ export default function App() {
               </div>
 
               {/* Chat Area */}
-              <div className="flex-1 flex flex-col h-full relative">
+              <div className={`flex-1 flex-col h-full relative ${selectedPartner ? 'flex' : 'hidden md:flex'}`}>
                  {/* background pattern */}
                  <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none"></div>
                  {selectedPartner ? (
@@ -1524,9 +1697,18 @@ export default function App() {
                             <div className="text-xs text-black dark:text-slate-400">{selectedPartner.degree || 'Current Program'}</div>
                           </div>
                         </div>
-                        <button onClick={() => openProfileModal(selectedPartner)} className="p-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50">
-                          <ChevronRight />
-                        </button>
+                        <div className="flex items-center">
+                          <button 
+                            onClick={() => setReportTarget({ userId: selectedPartner.uid, displayName: selectedPartner.displayName || 'Unknown User' })} 
+                            className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                            title="Report User"
+                          >
+                            <Flag className="w-5 h-5" />
+                          </button>
+                          <button onClick={() => openProfileModal(selectedPartner)} className="p-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50 transition-colors">
+                            <ChevronRight />
+                          </button>
+                        </div>
                     </div>
 
                     <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-transparent min-h-0 relative z-10">
@@ -1563,8 +1745,13 @@ export default function App() {
                              <>
                                {chatMessages.map((msg) => (
                                  <div key={msg.id} className={`flex ${msg.senderId === currentUser?.uid ? 'justify-end' : 'justify-start'}`}>
-                                   <div className={`${msg.senderId === currentUser?.uid ? 'bg-red-600 text-white rounded-tr-none shadow-sm' : 'bg-slate-100 dark:bg-[#27272a] text-black dark:text-slate-50 border border-slate-200 dark:border-slate-800 rounded-tl-none shadow-sm'} p-4 rounded-2xl max-w-[80%] text-sm`}>
-                                       {msg.text}
+                                   <div className={`${msg.senderId === currentUser?.uid ? 'bg-red-600 text-white rounded-tr-none shadow-sm' : 'bg-slate-100 dark:bg-[#27272a] text-black dark:text-slate-50 border border-slate-200 dark:border-slate-800 rounded-tl-none shadow-sm'} px-4 py-2.5 rounded-2xl max-w-[85%] relative w-fit min-w-[80px]`}>
+                                       <div className="text-[15px] break-words whitespace-pre-wrap pb-3 pr-8 leading-relaxed">
+                                           {msg.text}
+                                       </div>
+                                       <span className={`text-[10px] absolute bottom-1.5 right-3 font-medium opacity-75 ${msg.senderId === currentUser?.uid ? 'text-white/90' : 'text-slate-500 dark:text-slate-400'}`}>
+                                          {formatMessageTime(msg.createdAt)}
+                                       </span>
                                    </div>
                                  </div>
                                ))}
@@ -1679,16 +1866,36 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-8"
+              className="relative bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 md:p-8"
             >
-              <button 
-                onClick={() => setSelectedProfileModal(null)}
-                className="absolute top-6 right-6 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50 bg-slate-50 dark:bg-[#18181b] p-2 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="absolute top-6 right-6 flex items-center gap-2">
+                {currentUser && currentUser.uid !== selectedProfileModal.uid && (
+                  <button 
+                    onClick={() => setReportTarget({ userId: selectedProfileModal.uid, displayName: selectedProfileModal.displayName || 'Unknown User' })}
+                    title="Report User"
+                    className="text-slate-500 hover:text-red-500 bg-slate-50 dark:bg-[#18181b] p-2 rounded-full transition-colors hidden md:block" // On mobile it might overlap, wait no let's make it block
+                  >
+                    <Flag className="w-4 h-4" />
+                  </button>
+                )}
+                <button 
+                  onClick={() => setSelectedProfileModal(null)}
+                  className="text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50 bg-slate-50 dark:bg-[#18181b] p-2 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-              <div className="flex flex-col md:flex-row gap-8 items-start">
+              {currentUser && currentUser.uid !== selectedProfileModal.uid && (
+                <button 
+                  onClick={() => setReportTarget({ userId: selectedProfileModal.uid, displayName: selectedProfileModal.displayName || 'Unknown User' })}
+                  className="absolute top-6 left-6 text-slate-500 hover:text-red-500 bg-slate-50 dark:bg-[#18181b] p-2 rounded-full transition-colors md:hidden"
+                >
+                  <Flag className="w-4 h-4" />
+                </button>
+              )}
+
+              <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start mt-8 md:mt-0">
                  <div className="w-32 h-32 rounded-3xl bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 flex items-center justify-center text-4xl font-bold overflow-hidden shrink-0">
                     {selectedProfileModal.photoURL ? (
                       <img src={selectedProfileModal.photoURL} alt={formatNameForPrivacy(currentUser?.uid, selectedProfileModal.uid, selectedProfileModal.displayName)} className="w-full h-full object-cover" />
@@ -1734,6 +1941,48 @@ export default function App() {
                     <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
                       {selectedProfileModal.bio || "No bio provided."}
                     </div>
+
+                    {selectedProfileModal.workExperiences && selectedProfileModal.workExperiences.length > 0 && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true }}
+                        className="py-4 border-t border-slate-200 dark:border-slate-800"
+                      >
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-50 uppercase tracking-wider mb-6">Work Experiences</h3>
+                        <div className="space-y-6 relative before:absolute before:inset-y-0 before:left-[11px] before:w-px before:bg-gradient-to-b before:from-slate-200 before:via-slate-200 before:to-transparent dark:before:from-slate-800 dark:before:via-slate-800 before:opacity-50 pl-8">
+                          {selectedProfileModal.workExperiences.map((exp, idx) => (
+                             <motion.div 
+                               key={idx} 
+                               initial={{ opacity: 0, x: -20 }}
+                               whileInView={{ opacity: 1, x: 0 }}
+                               viewport={{ once: true, margin: "-50px" }}
+                               transition={{ delay: idx * 0.15, type: 'spring', damping: 20, stiffness: 100 }}
+                               className="relative group cursor-default"
+                             >
+                               <div className="absolute -left-[37px] top-1 w-6 h-6 bg-slate-50 dark:bg-[#18181b] rounded-full flex items-center justify-center border border-slate-200 dark:border-slate-800 group-hover:border-red-500/50 dark:group-hover:border-red-500/50 transition-colors shadow-sm z-10">
+                                 <div className="w-2 h-2 bg-slate-300 dark:bg-slate-700 rounded-full group-hover:bg-red-500 transition-colors group-hover:scale-125 duration-300"></div>
+                               </div>
+                               <div className="bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-sm hover:shadow-md transition-all group-hover:-translate-y-0.5">
+                                 <div className="flex flex-col md:flex-row md:justify-between items-start gap-2 md:gap-4">
+                                   <div>
+                                     <div className="font-bold text-slate-900 dark:text-slate-50 text-base">{exp.role}</div>
+                                     <div className="text-red-600 dark:text-red-400 font-medium text-sm mt-0.5">{exp.company}</div>
+                                   </div>
+                                   {(exp.durationYears !== undefined || exp.durationMonths !== undefined || exp.duration) && (
+                                     <div className="text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wider uppercase whitespace-nowrap">
+                                       {exp.durationYears !== undefined || exp.durationMonths !== undefined 
+                                         ? `${exp.durationYears || 0} Y ${exp.durationMonths || 0} M` 
+                                         : exp.duration}
+                                     </div>
+                                   )}
+                                 </div>
+                               </div>
+                             </motion.div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
 
                     {selectedProfileModal.skills && selectedProfileModal.skills.length > 0 && (
                       <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
@@ -1820,6 +2069,56 @@ export default function App() {
               
               <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-50 mb-2 z-10">Profile Saved!</h2>
               <p className="text-slate-700 dark:text-slate-300 text-sm z-10 text-center max-w-[200px]">Your information has been updated successfully.</p>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Sign Out Confirmation Dialog */}
+      <AnimatePresence>
+        {showSignOutConfirmDialog && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSignOutConfirmDialog(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl overflow-hidden"
+            >
+              <div className="flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-12 h-12 bg-slate-200 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-700 dark:text-slate-300">
+                  <LogOut className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-2">Sign Out</h2>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">
+                    Are you sure you want to sign out of your account?
+                  </p>
+                </div>
+                <div className="flex gap-3 w-full mt-2">
+                  <button 
+                    onClick={() => setShowSignOutConfirmDialog(false)}
+                    className="flex-1 py-2 bg-slate-200 dark:bg-[#27272a] text-slate-700 dark:text-slate-300 font-medium rounded-xl hover:bg-slate-300 dark:hover:bg-[#3f3f46] transition"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => {
+                        setShowSignOutConfirmDialog(false);
+                        handleSignOut();
+                    }}
+                    className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
@@ -1957,6 +2256,87 @@ export default function App() {
                     className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition"
                   >
                     Pause
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Report User Dialog */}
+      <AnimatePresence>
+        {reportTarget && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                if (!isReportingSubmitting) {
+                  setReportTarget(null);
+                  setReportReason('');
+                }
+              }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-sm bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl overflow-hidden"
+            >
+              <div className="flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center text-red-600 dark:text-red-400">
+                  <Flag className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-900 dark:text-slate-50">Report User</h3>
+                  <p className="text-slate-700 dark:text-slate-300 mt-2 text-sm">
+                    You are reporting <span className="font-bold">{reportTarget.displayName}</span>. 
+                    Please provide a reason for this report.
+                  </p>
+                </div>
+                
+                <textarea 
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  disabled={isReportingSubmitting}
+                  className="w-full bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50 placeholder-slate-500 mt-2" 
+                  placeholder="Tell us what happened..." 
+                  rows={3}
+                ></textarea>
+
+                <div className="flex gap-3 w-full mt-4">
+                  <button 
+                    disabled={isReportingSubmitting}
+                    onClick={() => {
+                      setReportTarget(null);
+                      setReportReason('');
+                    }}
+                    className="flex-1 py-2 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-50 font-medium rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    disabled={!reportReason.trim() || isReportingSubmitting}
+                    onClick={async () => {
+                      if (!currentUser || !reportReason.trim() || !reportTarget) return;
+                      setIsReportingSubmitting(true);
+                      try {
+                         await reportUser(currentUser.uid, reportTarget.userId, reportReason.trim());
+                         alert(`Your report against ${reportTarget.displayName} has been submitted.`);
+                      } catch (error) {
+                         alert("Failed to submit report. Please try again.");
+                      } finally {
+                         setIsReportingSubmitting(false);
+                         setReportTarget(null);
+                         setReportReason('');
+                      }
+                    }}
+                    className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isReportingSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Report'}
                   </button>
                 </div>
               </div>

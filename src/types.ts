@@ -16,6 +16,7 @@ export interface UserProfile {
   ugDegree?: string;
   collegeName: string;
   experienceYears: number;
+  isFresher?: boolean;
   companyName?: string;
   role?: string;
   workExperiences?: WorkExperience[];
@@ -52,6 +53,15 @@ export interface Message {
   receiverId: string;
   isRead?: boolean;
   createdAt: any;
+}
+
+export interface Report {
+  id?: string;
+  reporterId: string;
+  reportedId: string;
+  reason: string;
+  createdAt: any;
+  status: 'pending' | 'reviewed';
 }
 
 export type View = 'home' | 'profile' | 'competitions' | 'teammates' | 'chat' | 'admin';
