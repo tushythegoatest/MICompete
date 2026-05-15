@@ -18,7 +18,8 @@ import {
   ThumbsUp,
   Network,
   Trash2,
-  Pause
+  Pause,
+  Briefcase
 } from 'lucide-react';
 import { View, UserProfile, Competition, Message, Endorsement } from './types.ts';
 import { auth } from './lib/firebase.ts';
@@ -846,7 +847,7 @@ export default function App() {
                   >
                     <div className="h-24 bg-gradient-to-br from-red-600/20 to-red-500/20 opacity-50 relative cursor-pointer" onClick={() => openProfileModal(tm)}>
                        <div className="absolute top-2 right-2 bg-black/40 backdrop-blur-md px-2 py-1 rounded-md text-xs text-slate-900 dark:text-slate-50 flex items-center gap-1 font-bold">
-                          <Trophy className="w-3 h-3 text-yellow-400" /> {tm.competitionCount || 0}
+                          <Trophy className="w-3 h-3 text-yellow-400" /> {tm.competitionCount === 11 ? '10+' : (tm.competitionCount || 0)}
                        </div>
                     </div>
                     <div className="px-6 pb-6 -mt-10">
@@ -863,6 +864,25 @@ export default function App() {
                       <h3 className="font-bold text-lg text-slate-900 dark:text-slate-50 cursor-pointer hover:text-red-600" onClick={() => openProfileModal(tm)}>{formatNameForPrivacy(currentUser?.uid, tm.uid, tm.displayName)}</h3>
                       <p className="text-xs text-slate-700 dark:text-slate-300 mb-0.5 font-medium uppercase tracking-wide truncate">{tm.degree || 'Current Program'}</p>
                       <p className="text-xs text-slate-700 dark:text-slate-300 mb-4 font-medium uppercase tracking-wide truncate">{tm.ugDegree || 'UG Degree'}{tm.collegeName ? ` @ ${tm.collegeName}` : ''}</p>
+                      
+                      {tm.experienceYears && tm.experienceYears > 0 ? (
+                        <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium tracking-wide mb-4 bg-slate-100 dark:bg-[#27272a] py-1 px-3 rounded-full w-fit mx-auto truncate max-w-[80%]">
+                           <Briefcase className="w-3.5 h-3.5" /> 
+                           {(() => {
+                              const yrs = Math.floor(tm.experienceYears);
+                              const mos = Math.round((tm.experienceYears - yrs) * 12);
+                              let parts = [];
+                              if (yrs > 0) parts.push(`${yrs} Yr${yrs > 1 ? 's' : ''}`);
+                              if (mos > 0) parts.push(`${mos} Mo${mos > 1 ? 's' : ''}`);
+                              return parts.join(' ');
+                           })()}
+                           {tm.role && tm.companyName && <span className="opacity-75 md:inline hidden truncate"> - {tm.role} @ {tm.companyName}</span>}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium tracking-wide mb-4 bg-slate-100 dark:bg-[#27272a] py-1 px-3 rounded-full w-fit mx-auto">
+                           <Briefcase className="w-3.5 h-3.5" /> Fresher
+                        </div>
+                      )}
                       
                       <div className="flex flex-wrap justify-center items-center gap-2 mb-6 min-h-[3rem]">
                         {tm.skills?.slice(0, 3).map(skill => (
@@ -1026,11 +1046,11 @@ export default function App() {
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">UG Name <span className="text-red-500">*</span></label>
+                          <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">UG College Name <span className="text-red-500">*</span></label>
                           <input 
                             value={profileForm.collegeName}
                             onChange={(e) => setProfileForm({...profileForm, collegeName: e.target.value})}
-                            className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50 placeholder-slate-500" 
+                            className="w-full bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50 placeholder-slate-500" 
                             placeholder="e.g. IIT Kharagpur" 
                           />
                         </div>
@@ -1098,13 +1118,16 @@ export default function App() {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Case Competitions Done <span className="text-red-500">*</span></label>
-                        <input 
-                          type="number" 
+                        <select
                           value={profileForm.competitionCount}
                           onChange={(e) => setProfileForm({...profileForm, competitionCount: parseInt(e.target.value) || 0})}
-                          className="w-full bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50 placeholder-slate-500" 
-                          placeholder="0" 
-                        />
+                          className="w-full bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-red-600 transition-all text-slate-900 dark:text-slate-50 [&>option]:bg-white dark:bg-[#09090b] [&>option]:text-slate-900 dark:text-slate-50"
+                        >
+                          {Array.from({ length: 11 }, (_, i) => (
+                            <option key={i} value={i}>{i}</option>
+                          ))}
+                          <option value={11}>10+</option>
+                        </select>
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">Bio <span className="text-red-500">*</span></label>
@@ -1166,7 +1189,7 @@ export default function App() {
                         <p className="text-slate-900 dark:text-slate-50">{userProfile?.degree || '-'}</p>
                       </div>
                       <div>
-                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">UG Name</h3>
+                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">UG College Name</h3>
                         <p className="text-slate-900 dark:text-slate-50">{userProfile?.collegeName || '-'}</p>
                       </div>
                       <div>
@@ -1225,7 +1248,7 @@ export default function App() {
                     </div>
                     <div>
                       <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Case Competitions Done</h3>
-                      <p className="text-slate-900 dark:text-slate-50">{userProfile?.competitionCount || 0}</p>
+                      <p className="text-slate-900 dark:text-slate-50">{userProfile?.competitionCount === 11 ? '10+' : (userProfile?.competitionCount || 0)}</p>
                     </div>
                     <div>
                       <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Bio</h3>
@@ -1550,8 +1573,29 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-600 px-3 py-1.5 rounded-lg w-fit text-sm font-bold">
-                       <Trophy className="w-4 h-4" /> {selectedProfileModal.competitionCount || 0} Case Competitions
+                    <div className="flex flex-wrap gap-3 items-center">
+                      <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 text-red-600 px-3 py-1.5 rounded-lg w-fit text-sm font-bold">
+                         <Trophy className="w-4 h-4" /> {selectedProfileModal.competitionCount === 11 ? '10+' : (selectedProfileModal.competitionCount || 0)} Case Competitions
+                      </div>
+                      
+                      {selectedProfileModal.experienceYears && selectedProfileModal.experienceYears > 0 ? (
+                        <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-lg w-fit text-sm font-bold">
+                           <Briefcase className="w-4 h-4" /> 
+                           {(() => {
+                              const yrs = Math.floor(selectedProfileModal.experienceYears);
+                              const mos = Math.round((selectedProfileModal.experienceYears - yrs) * 12);
+                              let parts = [];
+                              if (yrs > 0) parts.push(`${yrs} Yr${yrs > 1 ? 's' : ''}`);
+                              if (mos > 0) parts.push(`${mos} Mo${mos > 1 ? 's' : ''}`);
+                              return parts.join(' ');
+                           })()} Exp
+                           {selectedProfileModal.role && selectedProfileModal.companyName ? ` (${selectedProfileModal.role} @ ${selectedProfileModal.companyName})` : ''}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 bg-slate-500/10 border border-slate-500/20 text-slate-600 dark:text-slate-400 px-3 py-1.5 rounded-lg w-fit text-sm font-bold">
+                           <Briefcase className="w-4 h-4" /> Fresher
+                        </div>
+                      )}
                     </div>
 
                     <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
