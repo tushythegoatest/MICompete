@@ -241,22 +241,22 @@ export default function App() {
         // Fallback locally
         setCompetitions([
           {
-            title: "Indian Case Challenge 2026 (ICC - Case Study Competition)",
-            organization: "Business Club, IIT Kharagpur",
+            title: "Global Hackathon 2026",
+            organization: "Tech Innovators",
             date: "Jan 05, 2026",
-            url: "https://unstop.com/p/indian-case-challenge-2026-icc-case-study-competition-iit-kharagpur-900593"
+            url: "https://unstop.com/hackathons"
           },
           {
-            title: "Uncharted: Case-Study Competition - 2026",
-            organization: "Unstop",
+            title: "AI For Good Hackathon",
+            organization: "OpenAI",
             date: "Mar 30, 2026",
-            url: "https://unstop.com/p/uncharted-case-study-competition-901174"
+            url: "https://unstop.com/hackathons"
           },
           {
-            title: "STRAITS - An International Crisis Management Case Competition - 2026",
-            organization: "Indian Institute of Management (IIM), Ahmedabad - Dubai",
+            title: "Web3 Builders Weekend",
+            organization: "Ethereum Foundation",
             date: "May 07, 2026",
-            url: "https://unstop.com/p/straits-an-international-crisis-management-case-competition-iim-ahmedabad-dubai-901046"
+            url: "https://unstop.com/hackathons"
           }
         ]);
       }
@@ -264,22 +264,22 @@ export default function App() {
       console.error(err);
       setCompetitions([
         {
-          title: "Indian Case Challenge 2026 (ICC - Case Study Competition)",
-          organization: "Business Club, IIT Kharagpur",
+          title: "Global Hackathon 2026",
+          organization: "Tech Innovators",
           date: "Jan 05, 2026",
-          url: "https://unstop.com/p/indian-case-challenge-2026-icc-case-study-competition-iit-kharagpur-900593"
+          url: "https://unstop.com/hackathons"
         },
         {
-          title: "Uncharted: Case-Study Competition - 2026",
-          organization: "Unstop",
+          title: "AI For Good Hackathon",
+          organization: "OpenAI",
           date: "Mar 30, 2026",
-          url: "https://unstop.com/p/uncharted-case-study-competition-901174"
+          url: "https://unstop.com/hackathons"
         },
         {
-          title: "STRAITS - An International Crisis Management Case Competition - 2026",
-          organization: "Indian Institute of Management (IIM), Ahmedabad - Dubai",
+          title: "Web3 Builders Weekend",
+          organization: "Ethereum Foundation",
           date: "May 07, 2026",
-          url: "https://unstop.com/p/straits-an-international-crisis-management-case-competition-iim-ahmedabad-dubai-901046"
+          url: "https://unstop.com/hackathons"
         }
       ]);
     } finally {
