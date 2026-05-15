@@ -128,8 +128,17 @@ export default function App() {
       setCurrentUser(user);
       if (user) {
         const profile = await getUserProfile(user.uid);
+        if (profile?.isBlocked) {
+          await logout();
+          alert("Your account has been blocked. Please contact the administrator.");
+          return;
+        }
+
         setUserProfile(profile);
         if (profile) {
+          // Update last active time in background
+          saveUserProfile({ ...profile, lastActiveAt: new Date() }).catch(e => console.error(e));
+
           setProfileForm({
             displayName: profile.displayName || '',
             photoURL: profile.photoURL || user.photoURL || '',

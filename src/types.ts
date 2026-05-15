@@ -26,6 +26,8 @@ export interface UserProfile {
   createdAt: any;
   isPaused?: boolean;
   isDeleted?: boolean;
+  isBlocked?: boolean;
+  lastActiveAt?: any;
 }
 
 export interface Competition {

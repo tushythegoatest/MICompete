@@ -49,6 +49,8 @@ service cloud.firestore {
         && (!('workExperiences' in data) || (data.workExperiences is list && data.workExperiences.size() <= 5))
         && (!('isPaused' in data) || (data.isPaused is bool))
         && (!('isDeleted' in data) || (data.isDeleted is bool))
+        && (!('isBlocked' in data) || (data.isBlocked is bool))
+        && (!('lastActiveAt' in data))
         && data.competitionCount is number && data.competitionCount >= 0
         && data.skills is list && data.skills.size() <= 50
         && data.createdAt == request.time;
@@ -78,12 +80,13 @@ service cloud.firestore {
       
       allow create: if isOwner(userId) && isValidUserProfile(incoming()) && isValidId(userId);
       
-      allow update: if isOwner(userId) 
+      allow update: if (isOwner(userId) || isAdmin())
         && isValidId(userId)
         && incoming().uid == existing().uid
         && incoming().email == existing().email
         && (
-          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'companyName', 'role', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'isPaused', 'isDeleted'])
+          isAdmin() ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'companyName', 'role', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'isPaused', 'isDeleted', 'lastActiveAt', 'isBlocked'])
         );
     }
 
