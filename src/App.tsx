@@ -1337,7 +1337,15 @@ export default function App() {
                         <div className="space-y-3 relative before:absolute before:inset-y-0 before:left-1.5 before:w-px before:bg-slate-200 pl-6">
                           {userProfile.workExperiences.map((exp, idx) => (
                              <div key={idx} className="relative">
-                               <div className="absolute -left-[27px] top-1.5 w-3 h-3 bg-red-600 rounded-full border-2 border-white shadow-sm"></div>
+                             <motion.div 
+                               initial={{ scale: 0 }}
+                               whileInView={{ scale: 1 }}
+                               viewport={{ once: true }}
+                               transition={{ type: "spring", bounce: 0.5, delay: idx * 0.1 }}
+                               className="absolute -left-[31px] top-0.5 w-5 h-5 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center border border-red-200 dark:border-red-800/50 shadow-sm"
+                             >
+                               <div className="w-2 h-2 bg-red-600 dark:bg-red-500 rounded-full"></div>
+                             </motion.div>
                                <div className="font-bold text-slate-900 dark:text-slate-50 text-sm">{exp.role}</div>
                                <div className="text-slate-700 dark:text-slate-300 text-sm">{exp.company}</div>
                                {(exp.durationYears !== undefined || exp.durationMonths !== undefined || exp.duration) && (

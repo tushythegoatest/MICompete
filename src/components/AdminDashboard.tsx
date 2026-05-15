@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { UserProfile, Message, MessageRequest } from '../types';
+import { UserProfile, Message } from '../types';
+import { MessageRequest } from '../services/firebaseService';
 import { collection, getDocs, collectionGroup, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Users, MessageSquare, Activity, Loader2, X, AlertOctagon, PauseCircle, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminDashboard({ currentUser }: { currentUser: any }) {
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -77,7 +79,13 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        <div className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4 }}
+          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
+        >
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
               <Users className="w-6 h-6" />
@@ -87,9 +95,15 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
               <p className="text-3xl font-bold text-slate-900 dark:text-white">{users.length}</p>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
+        >
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center">
               <MessageSquare className="w-6 h-6" />
@@ -99,9 +113,15 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
               <p className="text-3xl font-bold text-slate-900 dark:text-white">{messages.length}</p>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
+        >
           <div className="flex items-center gap-4 mb-4">
             <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center">
               <Activity className="w-6 h-6" />
@@ -111,12 +131,18 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
               <p className="text-3xl font-bold text-slate-900 dark:text-white">{requests.length}</p>
             </div>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Recent Users */}
-        <div className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-[500px] flex flex-col">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4, delay: 0.3 }}
+          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-[500px] flex flex-col"
+        >
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold text-slate-900 dark:text-white">Recent Users</h2>
           </div>
@@ -131,8 +157,10 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
           </div>
           <div className="overflow-y-auto flex-1 space-y-4 pr-2 cursor-pointer">
             {users.filter(u => u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase())).map(user => (
-              <div 
+              <motion.div 
                 key={user.uid} 
+                initial={{ opacity: 0, x: -10 }}
+                whileInView={{ opacity: 1, x: 0 }}
                 onClick={() => setSelectedUser(user)}
                 className={`flex gap-4 items-center p-3 rounded-xl transition-colors ${selectedUser?.uid === user.uid ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900/40 border' : 'hover:bg-slate-50 dark:hover:bg-[#27272a]'}`}
               >
@@ -149,20 +177,26 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
                   {user.isBlocked ? <div className="text-purple-500">Blocked</div> : null}
                   {!user.isDeleted && !user.isPaused && !user.isBlocked && <div className="text-green-500">Active</div>}
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
-        </div>
+        </motion.div>
 
         {/* Recent Messages */}
-        <div className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-[500px] flex flex-col">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.4, delay: 0.4 }}
+          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-[500px] flex flex-col"
+        >
           <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Recent Messages</h2>
           <div className="overflow-y-auto flex-1 space-y-4 pr-2">
             {messages.map((msg, i) => {
               const sender = users.find(u => u.uid === msg.senderId);
               const receiver = users.find(u => u.uid === msg.receiverId);
               return (
-                <div key={i} className="p-3 bg-slate-50 dark:bg-[#27272a] rounded-xl border border-slate-100 dark:border-slate-800">
+                <motion.div key={i} initial={{ opacity: 0, x: 10 }} whileInView={{ opacity: 1, x: 0 }} className="p-3 bg-slate-50 dark:bg-[#27272a] rounded-xl border border-slate-100 dark:border-slate-800">
                   <div className="flex justify-between items-center mb-2">
                      <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
                         {sender?.displayName || 'Unknown'} → {receiver?.displayName || 'Unknown'}
@@ -170,19 +204,26 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
                      <span className="text-[10px] text-slate-400">{new Date(msg.createdAt?.toDate?.() || msg.createdAt).toLocaleDateString()}</span>
                   </div>
                   <p className="text-sm text-slate-800 dark:text-slate-200">{msg.text}</p>
-                </div>
+                </motion.div>
               );
             })}
             {messages.length === 0 && (
               <p className="text-sm text-slate-500 text-center py-8">No messages found.</p>
             )}
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* User Details Modal/Sidebar */}
+      <AnimatePresence>
       {selectedUser && (
-        <div className="fixed inset-y-0 right-0 w-full md:w-96 bg-white dark:bg-[#09090b] shadow-2xl border-l border-slate-200 dark:border-slate-800 z-50 overflow-y-auto transform transition-transform">
+        <motion.div 
+          initial={{ x: '100%', opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: '100%', opacity: 0 }}
+          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          className="fixed inset-y-0 right-0 w-full md:w-96 bg-white dark:bg-[#09090b] shadow-2xl border-l border-slate-200 dark:border-slate-800 z-50 overflow-y-auto"
+        >
           <div className="p-6">
             <div className="flex justify-between items-center mb-8">
               <h2 className="text-xl font-bold text-slate-900 dark:text-white">User Details</h2>
@@ -289,8 +330,9 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
               </button>
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }
