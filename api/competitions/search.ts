@@ -6,34 +6,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const response = await fetch('https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&page=1&per_page=15&oppstatus=open', {
+    const response = await fetch('https://devpost.com/api/hackathons', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'
       }
     });
 
     if (!response.ok) {
-      throw new Error("Invalid response from Unstop API");
+      throw new Error("Invalid response from Devpost API");
     }
     
     const data = await response.json();
     
-    if (!data || !data.data || !data.data.data) {
-      throw new Error("Invalid response JSON structure from Unstop API");
+    if (!data || !data.hackathons) {
+      throw new Error("Invalid response JSON structure from Devpost API");
     }
 
-    const competitions = data.data.data.map((item: any) => {
-      let finalUrl = item.seo_url || `https://unstop.com/${item.public_url}`;
-      if (finalUrl && !finalUrl.startsWith('http')) {
-        finalUrl = `https://unstop.com/${finalUrl.startsWith('/') ? finalUrl.slice(1) : finalUrl}`;
-      }
-      return {
-        title: item.title,
-        organization: item.organisation?.name || 'Unknown Organization',
-        date: item.end_date ? new Date(item.end_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric'}) : 'Various dates',
-        url: finalUrl
-      };
-    });
+    const competitions = data.hackathons.slice(0, 15).map((item: any) => ({
+      title: item.title,
+      organization: item.organization_name || 'Various Organizers',
+      date: item.submission_period_dates || 'Various dates',
+      url: item.url
+    }));
 
     res.status(200).json({ competitions });
   } catch (error) {

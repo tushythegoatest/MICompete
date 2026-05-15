@@ -788,7 +788,7 @@ export default function App() {
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Active Competitions</h2>
-                  <p className="text-slate-700 dark:text-slate-300">Curated from Unstop and Mettl via AI</p>
+                  <p className="text-slate-700 dark:text-slate-300">Curated from Devpost and more via AI</p>
                 </div>
                 <button 
                   onClick={handleSearchCompetitions}
