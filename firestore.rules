@@ -11,6 +11,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'mail2tushar.jain@gmail.com';
+    }
+
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -90,12 +94,12 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow list: if isSignedIn() 
           && isValidId(chatId)
-          && chatId.matches('.*' + request.auth.uid + '.*');
+          && (chatId.matches('.*' + request.auth.uid + '.*') || isAdmin());
           
         allow get: if isSignedIn() 
           && isValidId(chatId)
           && isValidId(messageId)
-          && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+          && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid || isAdmin());
         
         allow create: if isSignedIn() 
           && isValidId(chatId)
@@ -112,7 +116,7 @@ service cloud.firestore {
     }
 
     match /{path=**}/messages/{messageId} {
-      allow list: if isSignedIn() && resource.data.receiverId == request.auth.uid;
+      allow list: if isSignedIn() && (resource.data.receiverId == request.auth.uid || isAdmin());
     }
 
     // Collection: Endorsements
@@ -125,8 +129,8 @@ service cloud.firestore {
 
     // Collection: Message Requests
     match /messageRequests/{requestId} {
-      allow read: if isSignedIn() && isValidId(requestId) && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
-      allow list: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      allow read: if isSignedIn() && isValidId(requestId) && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid || isAdmin());
       allow create: if isSignedIn() && isValidId(requestId) 
         && incoming().senderId == request.auth.uid 
         && incoming().keys().hasAll(['senderId', 'receiverId', 'status', 'createdAt'])

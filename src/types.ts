@@ -52,4 +52,4 @@ export interface Message {
   createdAt: any;
 }
 
-export type View = 'home' | 'profile' | 'competitions' | 'teammates' | 'chat';
+export type View = 'home' | 'profile' | 'competitions' | 'teammates' | 'chat' | 'admin';

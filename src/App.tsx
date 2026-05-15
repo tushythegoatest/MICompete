@@ -19,11 +19,13 @@ import {
   Network,
   Trash2,
   Pause,
-  Briefcase
+  Briefcase,
+  Shield
 } from 'lucide-react';
 import { View, UserProfile, Competition, Message, Endorsement } from './types.ts';
 import { auth } from './lib/firebase.ts';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import AdminDashboard from './components/AdminDashboard.tsx';
 import { 
   signInWithGoogle, 
   logout, 
@@ -289,7 +291,7 @@ export default function App() {
       setShowProfileSavedSplash(true);
       setTimeout(() => setShowProfileSavedSplash(false), 2500);
     } catch (err) {
-      alert("Failed to save profile. Check console for details.");
+      setProfileError("Failed to save profile. Check console for details.");
     }
   };
 
@@ -356,7 +358,7 @@ export default function App() {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 500 * 1024) {
-         alert("Image is too large. Max 500KB accepted.");
+         setProfileError("Image is too large. Max 500KB accepted.");
          return;
       }
       const reader = new FileReader();
@@ -376,6 +378,7 @@ export default function App() {
       { id: 'teammates', label: 'Connect', icon: Network },
       { id: 'chat', label: 'Message', icon: MessageSquare, hasNotification: hasUnreadMessages },
       { id: 'profile', label: 'Profile', icon: User },
+      ...(currentUser.email === 'mail2tushar.jain@gmail.com' ? [{ id: 'admin', label: 'Admin', icon: Shield }] : [])
     ] : []),
   ];
 
@@ -1608,6 +1611,17 @@ export default function App() {
                    </div>
                  )}
               </div>
+            </motion.div>
+          )}
+
+          {currentView === 'admin' && (
+            <motion.div
+              key="admin"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+            >
+              <AdminDashboard currentUser={currentUser} />
             </motion.div>
           )}
         </AnimatePresence>
