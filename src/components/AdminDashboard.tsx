@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { UserProfile, Message, Report } from '../types';
 import { MessageRequest, getAllReports, updateReportStatus, deleteReport, saveGlobalSettings, createAnnouncement, updateUserRole, getAllAnnouncements, updateAnnouncement, deleteAnnouncement } from '../services/firebaseService';
 import { collection, getDocs, collectionGroup, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
@@ -40,6 +40,16 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
     registrationOpen: true
   });
   const [savingSettings, setSavingSettings] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const handleTabChange = (tabId: any) => {
+    setActiveTab(tabId);
+    if (window.innerWidth < 768) {
+      setTimeout(() => {
+        contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  };
   const [showMaintenanceConfirm, setShowMaintenanceConfirm] = useState(false);
   const [announcementMsg, setAnnouncementMsg] = useState('');
   const [confirmAction, setConfirmAction] = useState<{
@@ -243,7 +253,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
         ].map(tab => (
           <button 
             key={tab.id} 
-            onClick={() => setActiveTab(tab.id as any)} 
+            onClick={() => handleTabChange(tab.id as any)} 
             className={`relative flex flex-col items-center justify-center p-4 rounded-2xl font-bold transition-all border ${activeTab === tab.id ? 'bg-red-600 text-white border-red-600 shadow-md ring-2 ring-red-600/20 ring-offset-2 ring-offset-white dark:ring-offset-[#09090b]' : 'bg-white dark:bg-[#18181b] text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-[#27272a] border-slate-200 dark:border-slate-800'}`}
           >
             <div className="relative">
@@ -257,7 +267,8 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
         ))}
       </div>
 
-      {activeTab === 'overview' && (
+      <div ref={contentRef} className="scroll-mt-4">
+        {activeTab === 'overview' && (
         <div className="space-y-8">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -275,7 +286,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                   <p className="text-3xl font-bold text-slate-900 dark:text-white">{users.length}</p>
                 </div>
               </div>
-              <button onClick={() => setActiveTab('users')} className="text-red-600 hover:text-red-700 text-sm font-bold mt-4 flex items-center gap-1"><BarChart2 className="w-4 h-4"/> View User Analytics</button>
+              <button onClick={() => handleTabChange('users')} className="text-red-600 hover:text-red-700 text-sm font-bold mt-4 flex items-center gap-1"><BarChart2 className="w-4 h-4"/> View User Analytics</button>
             </motion.div>
 
             <motion.div 
@@ -293,7 +304,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                   <p className="text-3xl font-bold text-slate-900 dark:text-white">{messages.length}</p>
                 </div>
               </div>
-              <button onClick={() => setActiveTab('messages')} className="text-red-600 hover:text-red-700 text-sm font-bold mt-4 flex items-center gap-1"><BarChart2 className="w-4 h-4"/> View Message Analytics</button>
+              <button onClick={() => handleTabChange('messages')} className="text-red-600 hover:text-red-700 text-sm font-bold mt-4 flex items-center gap-1"><BarChart2 className="w-4 h-4"/> View Message Analytics</button>
             </motion.div>
 
             <motion.div 
@@ -1059,8 +1070,8 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
           </div>
         </motion.div>
       )}
-
       </AnimatePresence>
+      </div>
 
       {/* Confirmation Dialog */}
       <AnimatePresence>
