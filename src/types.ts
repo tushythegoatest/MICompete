@@ -29,6 +29,7 @@ export interface UserProfile {
   isDeleted?: boolean;
   isBlocked?: boolean;
   lastActiveAt?: any;
+  dismissedAnnouncements?: string[];
 }
 
 export interface Competition {
@@ -64,4 +65,29 @@ export interface Report {
   status: 'pending' | 'reviewed';
 }
 
-export type View = 'home' | 'profile' | 'competitions' | 'teammates' | 'chat' | 'admin';
+export interface Announcement {
+  id?: string;
+  message: string;
+  senderId?: string;
+  createdAt: any;
+  active: boolean;
+}
+
+export interface SupportTicket {
+  id?: string;
+  userId: string;
+  title: string;
+  description: string;
+  type: 'bug' | 'query';
+  status: 'open' | 'closed';
+  createdAt: any;
+}
+
+export interface GlobalSettings {
+  maintenanceMode: boolean;
+  matchingEnabled: boolean;
+  allowedDomains: string[];
+  maxUsers: number;
+}
+
+export type View = 'home' | 'profile' | 'competitions' | 'teammates' | 'chat' | 'admin' | 'support';

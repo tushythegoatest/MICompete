@@ -23,18 +23,27 @@ import {
   Shield,
   Pencil,
   Flag,
-  Activity
+  Activity,
+  Mail,
+  CheckCheck,
+  UserMinus,
+  UserPlus,
+  UserCheck,
+  Hourglass
 } from 'lucide-react';
 import { View, UserProfile, Competition, Message, Endorsement } from './types.ts';
 import { auth } from './lib/firebase.ts';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import type { QueryDocumentSnapshot } from 'firebase/firestore';
 import AdminDashboard from './components/AdminDashboard.tsx';
 import { 
   signInWithGoogle, 
   logout, 
   getUserProfile, 
+  listenToUserProfile,
   saveUserProfile, 
   getAllUsers, 
+  getPaginatedUsers,
   sendMessage, 
   listenToMessages,
   endorseSkill,
@@ -44,14 +53,24 @@ import {
   listenToMessageRequests,
   sendMessageRequest,
   updateMessageRequestStatus,
+  deleteMessageRequest,
+  deleteChatHistory,
   checkChatExists,
   listenToTotalUnreadMessages,
   listenToAllReceivedMessages,
   listenToAllSentMessages,
   markMessagesAsRead,
-  reportUser
+  reportUser,
+  setTypingStatus,
+  listenToTypingStatus,
 } from './services/firebaseService.ts';
 
+import { Navbar } from './components/layout/Navbar.tsx';
+
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useInfiniteQuery } from '@tanstack/react-query';
+
+// Remove the import of 'Menu' and 'X' from 'lucide-react' if they are unused, but it's okay to leave them for now.
 export const formatNameForPrivacy = (currentUserUid: string | undefined, profileUid: string, rawName: string | undefined): string => {
   if (!rawName) return 'User';
   if (currentUserUid === profileUid) return rawName;
@@ -92,12 +111,38 @@ export const formatMessageTime = (date: any) => {
 };
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<View>('home');
+  const [currentView, setCurrentViewState] = useState<View>('home');
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const path = location.pathname.split('/')[1];
+    if (path) {
+      setCurrentViewState(path as View);
+    } else {
+      setCurrentViewState('home');
+    }
+  }, [location.pathname]);
+
+  const setCurrentView = (view: View) => {
+    setCurrentViewState(view);
+    navigate(view === 'home' ? '/' : `/${view}`);
+  };
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [allTeammates, setAllTeammates] = useState<UserProfile[]>([]);
+  // Replaced with React Query:
+  // const [allTeammates, setAllTeammates] = useState<UserProfile[]>([]);
+  // const [lastVisibleDoc, setLastVisibleDoc] = useState<QueryDocumentSnapshot | null>(null);
+  // const [hasMoreTeammates, setHasMoreTeammates] = useState(true);
+  const [globalSettings, setGlobalSettings] = useState<import('./types').GlobalSettings | null>(null);
+  const [announcements, setAnnouncements] = useState<import('./types').Announcement[]>([]);
+  const [announcementToDismiss, setAnnouncementToDismiss] = useState<string | null>(null);
+  
+  const visibleAnnouncements = React.useMemo(() => {
+    return announcements.filter(a => a.id && !userProfile?.dismissedAnnouncements?.includes(a.id));
+  }, [announcements, userProfile?.dismissedAnnouncements]);
   const [activeChatUserIds, setActiveChatUserIds] = useState<string[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<UserProfile | null>(null);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
@@ -122,6 +167,8 @@ export default function App() {
   const [newMessage, setNewMessage] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isMessagesLoading, setIsMessagesLoading] = useState(false);
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Filters
   const [filterSkill, setFilterSkill] = useState('');
@@ -175,6 +222,11 @@ export default function App() {
   const [showDeleteProgressDialog, setShowDeleteProgressDialog] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [showPauseConfirmDialog, setShowPauseConfirmDialog] = useState(false);
+  const [showSupportDialog, setShowSupportDialog] = useState(false);
+  const [supportForm, setSupportForm] = useState<{ title: string, description: string, type: 'query' | 'bug' }>({ title: '', description: '', type: 'query' });
+  const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
+
+  const [showMaintenancePopup, setShowMaintenancePopup] = useState(false);
 
   useEffect(() => {
     const isModalOpen = !!(
@@ -185,6 +237,9 @@ export default function App() {
       showDeleteProgressDialog ||
       showPauseConfirmDialog ||
       showProfileSavedSplash ||
+      showSupportDialog ||
+      showMaintenancePopup ||
+      announcementToDismiss !== null ||
       (!userProfile && currentUser) // Onboarding screen
     );
 
@@ -205,70 +260,120 @@ export default function App() {
     showDeleteProgressDialog,
     showPauseConfirmDialog,
     showProfileSavedSplash,
+    showSupportDialog,
+    showMaintenancePopup,
+    announcementToDismiss,
     userProfile,
     currentUser
   ]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      if (user) {
-        const profile = await getUserProfile(user.uid);
-        if (profile?.isBlocked) {
-          await logout();
-          alert("Your account has been blocked. Please contact the administrator.");
-          return;
-        }
-
-        setUserProfile(profile);
-        if (profile) {
-          // Update last active time in background
-          saveUserProfile({ ...profile, lastActiveAt: new Date() }).catch(e => console.error(e));
-
-          setProfileForm({
-            displayName: profile.displayName || '',
-            photoURL: profile.photoURL || user.photoURL || '',
-            gender: profile.gender || '',
-            degree: profile.degree || '',
-            ugDegree: profile.ugDegree || '',
-            collegeName: profile.collegeName || '',
-            experienceYears: profile.experienceYears || 0,
-            isFresher: profile.isFresher || false,
-            companyName: profile.companyName || '',
-            role: profile.role || '',
-            workExperiences: profile.workExperiences || [],
-            skills: profile.skills?.join(', ') || '',
-            competitionCount: profile.competitionCount || 0,
-            bio: profile.bio || ''
-          });
-          if (profile.darkMode) {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
-        } else {
-          setProfileForm({ ...DEFAULT_PROFILE_FORM, displayName: user.displayName || '', photoURL: user.photoURL || '' });
-          setCurrentView('profile');
-          setIsEditingProfile(true);
-        }
-      } else {
-        setUserProfile(null);
-        setCurrentView('home');
-        document.documentElement.classList.remove('dark');
-      }
-      setIsLoading(false);
-    });
-    return unsubscribe;
+    let unsubscribeAnnouncements: () => void;
+    try {
+      import('./services/firebaseService').then(m => {
+        m.getGlobalSettings().then(setGlobalSettings);
+        unsubscribeAnnouncements = m.listenToAnnouncements(setAnnouncements);
+      });
+    } catch (e) { console.error(e); }
+    return () => {
+      if (unsubscribeAnnouncements) unsubscribeAnnouncements();
+    };
   }, []);
 
   useEffect(() => {
-    if (currentView === 'teammates' || currentView === 'chat') {
-      fetchTeammates();
-    }
-  }, [currentView]);
+    let unsubscribeProfile: (() => void) | undefined;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = undefined;
+      }
+
+      if (user) {
+        unsubscribeProfile = listenToUserProfile(user.uid, async (profile) => {
+          let settings = globalSettings;
+          if (!settings) {
+            try {
+               settings = await import('./services/firebaseService').then(m => m.getGlobalSettings());
+            } catch(e) {}
+          }
+          
+          if (settings?.maintenanceMode === true && profile?.role !== 'admin' && user?.email !== 'mail2tushar.jain@gmail.com') {
+             await logout();
+             setCurrentUser(null);
+             setUserProfile(null);
+             setIsLoading(false);
+             setShowMaintenancePopup(true);
+             return;
+          }
+
+          setCurrentUser(user);
+          if (profile?.isBlocked) {
+            await logout();
+            alert("Your account has been blocked. Please contact the administrator.");
+            return;
+          }
+
+          setUserProfile(profile);
+          if (profile) {
+            // Update last active time in background (throttled/debounced if needed, but here simple)
+            // Note: we might want to avoid doing this on EVERY profile update if we are listening to it.
+            // But usually profile updates are rare.
+            
+            setProfileForm({
+              displayName: profile.displayName || '',
+              photoURL: profile.photoURL || user.photoURL || '',
+              gender: profile.gender || '',
+              degree: profile.degree || '',
+              ugDegree: profile.ugDegree || '',
+              collegeName: profile.collegeName || '',
+              experienceYears: profile.experienceYears || 0,
+              isFresher: profile.isFresher || false,
+              companyName: profile.companyName || '',
+              role: profile.role || '',
+              workExperiences: profile.workExperiences || [],
+              skills: profile.skills?.join(', ') || '',
+              competitionCount: profile.competitionCount || 0,
+              bio: profile.bio || ''
+            });
+
+            if (profile.darkMode) {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+          } else {
+            setProfileForm({ ...DEFAULT_PROFILE_FORM, displayName: user.displayName || '', photoURL: user.photoURL || '' });
+            setCurrentView('profile');
+            setIsEditingProfile(true);
+          }
+          setIsLoading(false);
+        });
+      } else {
+        setUserProfile(null);
+        setCurrentUser(null);
+        setCurrentView('home');
+        document.documentElement.classList.remove('dark');
+        setIsLoading(false);
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
+    };
+  }, []);
+
+  // No longer needed due to useInfiniteQuery
+  // useEffect(() => {
+  //   if (currentView === 'teammates' || currentView === 'chat') {
+  //     // fetchTeammates();
+  //   }
+  // }, [currentView]);
 
   useEffect(() => {
     let unsubscribe: () => void;
+    let typingUnsubscribe: () => void;
     if (currentView === 'chat' && currentUser && selectedPartner) {
       setIsMessagesLoading(true);
       unsubscribe = listenToMessages(currentUser.uid, selectedPartner.uid, (msgs) => {
@@ -280,10 +385,17 @@ export default function App() {
           setReceivedMessages(prev => prev.map(m => m.senderId === selectedPartner.uid ? { ...m, isRead: true } : m));
         }
       });
+      typingUnsubscribe = listenToTypingStatus(currentUser.uid, selectedPartner.uid, (isTyping) => {
+        setIsPartnerTyping(isTyping);
+      });
     } else {
       setChatMessages([]);
+      setIsPartnerTyping(false);
     }
-    return () => unsubscribe?.();
+    return () => {
+      if (unsubscribe) unsubscribe();
+      if (typingUnsubscribe) typingUnsubscribe();
+    }
   }, [currentView, currentUser, selectedPartner]);
 
   useEffect(() => {
@@ -313,21 +425,42 @@ export default function App() {
     };
   }, [currentUser]);
 
-  const fetchTeammates = async () => {
-    if (!currentUser) return;
-    const users = await getAllUsers();
-    const teammates = users.filter(u => u.uid !== currentUser.uid);
-    setAllTeammates(teammates);
-    
-    // Check which users have existing chats
-    const activeChatsPromises = teammates.map(async (t) => {
-      const hasChat = await checkChatExists(currentUser.uid, t.uid);
-      return hasChat ? t.uid : null;
-    });
-    
-    const activeChats = (await Promise.all(activeChatsPromises)).filter(Boolean) as string[];
-    setActiveChatUserIds(activeChats);
+  const teammatesQuery = useInfiniteQuery({
+    queryKey: ['teammates', currentUser?.uid],
+    initialPageParam: null as any,
+    queryFn: async ({ pageParam = null as any }) => {
+      if (!currentUser) return { users: [], lastDoc: null, hasMore: false };
+      const { users, lastDoc } = await getPaginatedUsers(20, pageParam);
+      const teammates = users.filter((u: UserProfile) => u.uid !== currentUser.uid);
+      return { 
+        users: teammates, 
+        lastDoc,
+        hasMore: users.length === 20
+      };
+    },
+    getNextPageParam: (lastPage: { users: UserProfile[], lastDoc: any, hasMore: boolean }) => lastPage.hasMore ? lastPage.lastDoc : undefined,
+    enabled: !!currentUser && (currentView === 'teammates' || currentView === 'chat'),
+  });
+
+  const allTeammates = teammatesQuery.data?.pages.flatMap((page: any) => page.users) || [];
+  const hasMoreTeammates = teammatesQuery.hasNextPage;
+  
+  const loadMoreTeammates = () => { 
+    if (teammatesQuery.hasNextPage && !teammatesQuery.isFetchingNextPage) teammatesQuery.fetchNextPage() 
   };
+
+  useEffect(() => {
+    if (!currentUser || allTeammates.length === 0) return;
+    const checkChats = async () => {
+      const activeChatsPromises = allTeammates.map(async (t) => {
+        const hasChat = await checkChatExists(currentUser.uid, t.uid);
+        return hasChat ? t.uid : null;
+      });
+      const activeChats = (await Promise.all(activeChatsPromises)).filter(Boolean) as string[];
+      setActiveChatUserIds(prev => Array.from(new Set([...prev, ...activeChats])));
+    };
+    checkChats();
+  }, [allTeammates.length, currentUser]);
 
   const getRequestStatus = (otherId: string) => {
     if (!currentUser) return null;
@@ -393,6 +526,17 @@ export default function App() {
     cleanedProfileData.isPaused = false;
 
     try {
+      if (!userProfile && globalSettings?.maxUsers && globalSettings.maxUsers > 0) {
+        const { collection, getCountFromServer } = await import('firebase/firestore');
+        const { db } = await import('./lib/firebase');
+        const coll = collection(db, 'users');
+        const snapshot = await getCountFromServer(coll);
+        if (snapshot.data().count >= globalSettings.maxUsers) {
+          setProfileError(`Registration is currently limited to ${globalSettings.maxUsers} users. Please try again later.`);
+          return;
+        }
+      }
+
       await saveUserProfile(cleanedProfileData);
       const updatedProfile = await getUserProfile(currentUser.uid);
       setUserProfile(updatedProfile);
@@ -410,6 +554,8 @@ export default function App() {
     setIsSendingMessage(true);
     try {
       await sendMessage(currentUser.uid, selectedPartner.uid, newMessage);
+      setTypingStatus(currentUser.uid, selectedPartner.uid, false);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       if (!activeChatUserIds.includes(selectedPartner.uid)) {
         setActiveChatUserIds(prev => [...prev, selectedPartner.uid]);
       }
@@ -420,6 +566,18 @@ export default function App() {
     } finally {
       setIsSendingMessage(false);
     }
+  };
+
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value);
+    if (!currentUser || !selectedPartner) return;
+    
+    setTypingStatus(currentUser.uid, selectedPartner.uid, true);
+    
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      setTypingStatus(currentUser.uid, selectedPartner.uid, false);
+    }, 2000);
   };
 
   const openProfileModal = async (profile: UserProfile) => {
@@ -482,13 +640,15 @@ export default function App() {
   const hasUnreadRequests = messageRequests.some(req => !req.isSender && req.status === 'pending');
   const hasUnreadMessages = totalUnreadMessages > 0;
 
+  const isAdmin = userProfile?.role === 'admin' || currentUser?.email === 'mail2tushar.jain@gmail.com';
+
   const navItems = [
     ...(currentUser ? [
       { id: 'competitions', label: 'Compete', icon: Trophy },
       { id: 'teammates', label: 'Connect', icon: Network },
       { id: 'chat', label: 'Message', icon: MessageSquare, hasNotification: hasUnreadMessages },
       { id: 'profile', label: 'Profile', icon: User },
-      ...(currentUser.email === 'mail2tushar.jain@gmail.com' ? [{ id: 'admin', label: 'Admin', icon: Shield }] : [])
+      ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield }] : [])
     ] : []),
   ];
 
@@ -534,103 +694,34 @@ export default function App() {
       <div className="fixed bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-red-400/20 dark:bg-red-800/10 rounded-full blur-[120px] pointer-events-none z-0 transition-colors"></div>
       <div className="fixed top-[30%] left-[40%] w-[30%] h-[30%] bg-red-300/10 dark:bg-red-900/10 rounded-full blur-[100px] pointer-events-none z-0 transition-colors"></div>
 
-      {/* Navigation */}
-      <nav className="sticky top-0 z-50 bg-white dark:bg-[#09090b]/80 dark:bg-[#09090b]/80 backdrop-blur-md border-b border-slate-200 dark:border-[#27272a] transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <button className="flex items-center gap-2 cursor-pointer transition-transform hover:scale-105 mr-4 lg:mr-8" onClick={() => setCurrentView('home')}>
-              <div className="w-8 h-8 flex items-center justify-center shrink-0">
-                <svg viewBox="0 0 100 100" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M50 5 L5 95 L95 95 Z" fill="#B32025" />
-                  <line x1="5" y1="95" x2="75" y2="50" stroke="white" strokeWidth="3" strokeLinecap="square" />
-                  <line x1="48" y1="67" x2="65" y2="95" stroke="white" strokeWidth="3" strokeLinecap="square" />
-                </svg>
-              </div>
-              <span className="font-bold text-xl tracking-tight text-slate-900 dark:text-slate-50">MICompete</span>
-            </button>
-
-            {/* Desktop Nav */}
-            <div className="hidden md:flex items-center space-x-6 lg:space-x-12">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setCurrentView(item.id as View)}
-                  className={`relative flex items-center gap-2 lg:gap-3 text-sm lg:text-base font-semibold transition-colors ${
-                    currentView === item.id ? 'text-red-600 border-b-2 border-red-600 pb-1 mt-1' : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50 pb-1 mt-1'
-                  }`}
-                >
-                  <div className="relative flex items-center justify-center">
-                    <item.icon className="w-4 h-4 lg:w-5 lg:h-5" />
-                    {item.hasNotification && (
-                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-600 rounded-full animate-pulse border-2 border-white dark:border-[#09090b] box-content"></span>
-                    )}
-                  </div>
-                  {item.label}
-                </button>
-              ))}
-              {!currentUser && (
-                <button 
-                  onClick={signInWithGoogle}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-500 transition-colors"
-                >
-                  Sign In with Google
-                </button>
-              )}
-            </div>
-
-            {/* Mobile Menu Toggle */}
-            <div className="md:hidden">
-              <button
-                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                className="p-2 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50"
+      {/* Announcement Banners */}
+      <div className="relative z-50">
+        {visibleAnnouncements.map((announcement) => (
+          <div key={announcement.id} className="bg-red-600 text-white px-4 py-3 sm:px-6 lg:px-8 shadow-md flex items-center justify-center relative">
+            <p className="text-sm font-medium text-center pr-8">
+              <span className="font-bold uppercase tracking-wider mr-2">Announcement:</span>
+              {announcement.message}
+            </p>
+            {currentUser && announcement.id && (
+              <button 
+                onClick={() => setAnnouncementToDismiss(announcement.id as string)}
+                className="absolute right-4 p-1 hover:bg-red-700 rounded-full transition-colors"
               >
-                {isMobileMenuOpen ? <X /> : <Menu />}
+                <X className="w-4 h-4" />
               </button>
-            </div>
+            )}
           </div>
-        </div>
+        ))}
+      </div>
 
-        {/* Mobile Nav */}
-        <AnimatePresence>
-          {isMobileMenuOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="md:hidden bg-white dark:bg-[#09090b]/90 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 overflow-hidden"
-            >
-              <div className="px-2 pt-2 pb-3 space-y-1">
-                {navItems.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setCurrentView(item.id as View);
-                      setIsMobileMenuOpen(false);
-                    }}
-                    className="flex items-center gap-3 w-full px-3 py-3 text-base font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-[#18181b] rounded-md"
-                  >
-                    <div className="relative flex items-center justify-center">
-                      <item.icon className="w-5 h-5" />
-                      {item.hasNotification && (
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse border-2 border-white dark:border-[#09090b] box-content"></span>
-                      )}
-                    </div>
-                    {item.label}
-                  </button>
-                ))}
-                {!currentUser && (
-                   <button 
-                    onClick={() => { signInWithGoogle(); setIsMobileMenuOpen(false); }}
-                    className="w-full mt-2 bg-red-600 text-white px-3 py-3 rounded-md text-base font-bold"
-                  >
-                    Sign In with Google
-                  </button>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </nav>
+      {/* Navigation */}
+      <Navbar 
+        currentView={currentView} 
+        setCurrentView={setCurrentView} 
+        currentUser={currentUser} 
+        userProfile={userProfile} 
+        hasUnreadMessages={hasUnreadMessages} 
+      />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-32 md:pb-8 relative z-10">
@@ -925,11 +1016,11 @@ export default function App() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[
-                  { name: "Unstop", url: "https://unstop.com", desc: "Discover opportunities, participate in competitions, and get hired.", img: "https://assets.unstop.com/images/favicon.ico" },
+                  { name: "Unstop", url: "https://unstop.com/competitions?oppstatus=open&usertype=corporate", desc: "Discover opportunities, participate in competitions, and get hired.", img: "https://assets.unstop.com/images/favicon.ico" },
                   { name: "Xathon Mettl", url: "https://xathon.mettl.com/", desc: "A leading platform for hackathons and coding challenges.", img: "https://devfolio.co/favicon.ico" },
                   { name: "Devfolio", url: "https://devfolio.co/", desc: "Grow through community and continuous learning with dev projects.", img: "https://devfolio.co/favicon.ico" },
                   { name: "InsideIIM", url: "https://insideiim.com/", desc: "An integral platform for MBA students and aspirants.", img: "https://insideiim.com/favicon.ico" },
-                  { name: "HackerEarth", url: "https://www.hackerearth.com/", desc: "Participate in global developer hackathons and hiring challenges.", img: "https://www.hackerearth.com/favicon.ico" }
+                  { name: "HackerEarth", url: "https://www.hackerearth.com/challenges/hackathon/", desc: "Participate in global developer hackathons and hiring challenges.", img: "https://www.hackerearth.com/favicon.ico" }
                 ].map((platform, idx) => (
                   <motion.a 
                     href={platform.url}
@@ -969,41 +1060,51 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
               className="space-y-8"
             >
-              <div className="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4">
-                <div>
-                  <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Find Teammates</h2>
-                  <p className="text-slate-700 dark:text-slate-300">Discover and connect with top B-school talent</p>
+              {(globalSettings?.matchingEnabled === false) ? (
+                <div className="flex flex-col items-center justify-center p-12 bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-3xl text-center">
+                  <div className="w-16 h-16 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-500 flex items-center justify-center rounded-2xl mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                  </div>
+                  <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50 mb-2">Matching is Disabled</h2>
+                  <p className="text-slate-600 dark:text-slate-400 max-w-md">The platform admin has temporarily disabled teammate matching. Please check back later.</p>
                 </div>
-                <div className="flex items-center gap-2 w-full md:w-auto">
-                   <button onClick={fetchTeammates} className="p-2 bg-slate-50 dark:bg-[#18181b] rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:bg-[#27272a] text-slate-700 dark:text-slate-300">
-                    <Search className="w-4 h-4" />
-                   </button>
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4">
+                    <div>
+                      <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50">Find Teammates</h2>
+                      <p className="text-slate-700 dark:text-slate-300">Discover and connect with top B-school talent</p>
+                    </div>
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                       <button onClick={() => teammatesQuery.refetch()} className="p-2 bg-slate-50 dark:bg-[#18181b] rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:bg-[#27272a] text-slate-700 dark:text-slate-300">
+                        <Search className="w-4 h-4" />
+                       </button>
+                    </div>
+                  </div>
 
-              <div className="flex gap-4 border-b border-slate-200 dark:border-slate-800 relative w-full mb-6 max-w-full overflow-x-auto no-scrollbar">
-                <button 
-                  onClick={() => setTeammatesTab('discover')}
-                  className={`pb-3 text-sm font-bold tracking-wide uppercase transition-colors whitespace-nowrap relative ${teammatesTab === 'discover' ? 'text-slate-900 dark:text-slate-50' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >
-                  Discover
-                  {teammatesTab === 'discover' && (
-                    <motion.div layoutId="teammatesTabLine" className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />
-                  )}
-                </button>
-                <button 
-                  onClick={() => setTeammatesTab('requests')}
-                  className={`pb-3 text-sm font-bold tracking-wide uppercase transition-colors whitespace-nowrap relative flex items-center gap-2 ${teammatesTab === 'requests' ? 'text-slate-900 dark:text-slate-50' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >
-                  Requests
-                  {messageRequests.filter(r => r.receiverId === currentUser?.uid && r.status === 'pending').length > 0 && (
-                     <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">{messageRequests.filter(r => r.receiverId === currentUser?.uid && r.status === 'pending').length}</span>
-                  )}
-                  {teammatesTab === 'requests' && (
-                    <motion.div layoutId="teammatesTabLine" className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />
-                  )}
-                </button>
-              </div>
+                  <div className="flex gap-4 border-b border-slate-200 dark:border-slate-800 relative w-full mb-6 max-w-full overflow-x-auto no-scrollbar">
+                    <button 
+                      onClick={() => setTeammatesTab('discover')}
+                      className={`pb-3 text-sm font-bold tracking-wide uppercase transition-colors whitespace-nowrap relative ${teammatesTab === 'discover' ? 'text-slate-900 dark:text-slate-50' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    >
+                      Discover
+                      {teammatesTab === 'discover' && (
+                        <motion.div layoutId="teammatesTabLine" className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />
+                      )}
+                    </button>
+                    <button 
+                      onClick={() => setTeammatesTab('requests')}
+                      className={`pb-3 text-sm font-bold tracking-wide uppercase transition-colors whitespace-nowrap relative flex items-center gap-2 ${teammatesTab === 'requests' ? 'text-slate-900 dark:text-slate-50' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                    >
+                      Requests
+                      {messageRequests.filter(r => r.receiverId === currentUser?.uid && r.status === 'pending').length > 0 && (
+                         <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.5 rounded-full">{messageRequests.filter(r => r.receiverId === currentUser?.uid && r.status === 'pending').length}</span>
+                      )}
+                      {teammatesTab === 'requests' && (
+                        <motion.div layoutId="teammatesTabLine" className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />
+                      )}
+                    </button>
+                  </div>
 
               {teammatesTab === 'discover' ? (
                 <>
@@ -1147,10 +1248,19 @@ export default function App() {
                               }
                               return (
                                 <button 
-                                  disabled
-                                  className="flex-1 bg-slate-200 dark:bg-[#27272a] text-slate-500 dark:text-slate-400 px-2 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 leading-tight"
+                                  onClick={async () => {
+                                    try {
+                                      await deleteMessageRequest(reqStatus.req.id);
+                                    } catch(e) {
+                                      console.error(e);
+                                    }
+                                  }}
+                                  className="flex-1 bg-slate-200 dark:bg-[#27272a] text-slate-500 dark:text-slate-400 px-2 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 leading-tight hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors group"
                                 >
-                                  Requested
+                                  <Hourglass className="w-4 h-4 group-hover:hidden" />
+                                  <UserMinus className="w-4 h-4 hidden group-hover:block" />
+                                  <span className="group-hover:hidden">Requested</span>
+                                  <span className="hidden group-hover:block">Cancel Request</span>
                                 </button>
                               );
                             } else {
@@ -1177,6 +1287,27 @@ export default function App() {
                     </div>
                   )}
                 </div>
+                {/* Infinite Scroll Observer */}
+                {hasMoreTeammates && teammatesTab === 'discover' && !filterSkill && !filterExperience && !filterMinComps && (
+                  <div className="flex justify-center mt-8 pb-8">
+                     <div
+                       ref={(el) => {
+                         if (el) {
+                           const observer = new IntersectionObserver((entries) => {
+                             if (entries[0].isIntersecting) {
+                               loadMoreTeammates();
+                               observer.disconnect();
+                             }
+                           });
+                           observer.observe(el);
+                         }
+                       }}
+                       className="w-8 h-8 relative"
+                     >
+                       <Loader2 className="w-8 h-8 animate-spin text-red-600" />
+                     </div>
+                  </div>
+                )}
                 </>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1233,9 +1364,38 @@ export default function App() {
                                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate w-32 md:w-full">{receiver.degree || 'Current Program'}</p>
                                </div>
                             </div>
-                            <div>
-                               {req.status === 'pending' && <span className="text-xs font-bold uppercase tracking-wide px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400">Pending</span>}
-                               {req.status === 'accepted' && <span className="text-xs font-bold uppercase tracking-wide px-2 py-1 rounded bg-green-500/20 text-green-600 dark:text-green-500 border border-green-500/20">Accepted</span>}
+                            <div className="flex gap-2 items-center">
+                               {req.status === 'pending' && (
+                                  <>
+                                    <span className="text-xs font-bold uppercase tracking-wide px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400">Pending</span>
+                                    <button onClick={async () => {
+                                      await deleteMessageRequest(req.id);
+                                    }} className="bg-red-50 dark:bg-[#27272a] text-red-600 dark:text-red-400 border border-slate-200 dark:border-slate-800 hover:bg-red-100 dark:hover:bg-red-900/40 p-1.5 rounded-lg transition-colors" title="Cancel Request">
+                                      <UserMinus className="w-4 h-4" />
+                                    </button>
+                                  </>
+                               )}
+                               {req.status === 'accepted' && (
+                                  <>
+                                     <span className="text-xs font-bold uppercase tracking-wide px-2 py-1 rounded bg-green-500/20 text-green-600 dark:text-green-500 border border-green-500/20">Accepted</span>
+                                     <button onClick={async () => {
+                                          try {
+                                            await deleteMessageRequest(req.id);
+                                            await deleteChatHistory(currentUser.uid, receiver.uid);
+                                            if (activeChatUserIds.includes(receiver.uid)) {
+                                              setActiveChatUserIds(prev => prev.filter(id => id !== receiver.uid));
+                                            }
+                                            if (selectedPartner?.uid === receiver.uid) {
+                                              setSelectedPartner(null);
+                                            }
+                                          } catch(e) {
+                                            console.error(e);
+                                          }
+                                     }} className="bg-red-50 dark:bg-[#27272a] text-red-600 dark:text-red-400 border border-slate-200 dark:border-slate-800 hover:bg-red-100 dark:hover:bg-red-900/40 p-1.5 rounded-lg transition-colors" title="Unfriend">
+                                       <UserMinus className="w-4 h-4" />
+                                     </button>
+                                  </>
+                               )}
                                {req.status === 'rejected' && <span className="text-xs font-bold uppercase tracking-wide px-2 py-1 rounded bg-red-500/20 text-red-600 dark:text-red-500 border border-red-500/20">Rejected</span>}
                             </div>
                           </div>
@@ -1245,6 +1405,8 @@ export default function App() {
                   </div>
                 </div>
               )}
+            </>
+            )}
             </motion.div>
           )}
 
@@ -1503,10 +1665,14 @@ export default function App() {
                   </>
                 ) : (
                   <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-4">
                       <div>
                         <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Full Name</h3>
                         <p className="text-slate-900 dark:text-slate-50">{userProfile?.displayName}</p>
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Google Email</h3>
+                        <p className="text-slate-900 dark:text-slate-50">{currentUser.email}</p>
                       </div>
                       <div>
                         <h3 className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300 mb-1">Gender</h3>
@@ -1670,6 +1836,15 @@ export default function App() {
                           <Trash2 className="w-4 h-4"/> Delete Account
                         </button>
                       </div>
+
+                      <div className="pt-4 border-t border-slate-200 dark:border-[#27272a]">
+                        <button 
+                          onClick={() => setShowSupportDialog(true)}
+                          className="w-full py-3 bg-[#18181b] dark:bg-slate-50 text-white dark:text-slate-900 font-bold rounded-xl hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                        >
+                          <Mail className="w-4 h-4"/> Raise Ticket/Submit Bug
+                        </button>
+                      </div>
                     </div>
                  </div>
               )}
@@ -1821,9 +1996,15 @@ export default function App() {
                                );
                              } else {
                                return (
-                                 <div className="h-full flex flex-col items-center justify-center text-slate-700 dark:text-slate-300 space-y-2">
+                                 <div className="h-full flex flex-col items-center justify-center text-slate-700 dark:text-slate-300 space-y-4">
                                     <Network className="w-8 h-8 opacity-20 text-slate-700 dark:text-slate-300" />
                                     <p className="text-sm">Waiting for {formatNameForPrivacy(currentUser?.uid, selectedPartner.uid, selectedPartner.displayName)} to accept your request.</p>
+                                    <button onClick={async () => {
+                                      await deleteMessageRequest(req.req.id);
+                                      setSelectedPartner(null);
+                                    }} className="bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-6 py-2 rounded-lg text-sm font-bold hover:bg-slate-300 dark:hover:bg-slate-700 flex flex-row items-center gap-2">
+                                      <Hourglass className="w-4 h-4" /> Cancel Request
+                                    </button>
                                  </div>
                                );
                              }
@@ -1836,8 +2017,11 @@ export default function App() {
                                        <div className="text-[15px] break-words whitespace-pre-wrap pb-3 pr-8 leading-relaxed">
                                            {msg.text}
                                        </div>
-                                       <span className={`text-[10px] absolute bottom-1.5 right-3 font-medium opacity-75 ${msg.senderId === currentUser?.uid ? 'text-white/90' : 'text-slate-500 dark:text-slate-400'}`}>
+                                       <span className={`text-[10px] absolute bottom-1.5 right-3 font-medium opacity-75 flex items-center gap-1 ${msg.senderId === currentUser?.uid ? 'text-white/90' : 'text-slate-500 dark:text-slate-400'}`}>
                                           {formatMessageTime(msg.createdAt)}
+                                          {msg.senderId === currentUser?.uid && (
+                                            <CheckCheck className={`w-3 h-3 ${msg.isRead ? 'text-blue-300' : 'opacity-50'}`} />
+                                          )}
                                        </span>
                                    </div>
                                  </div>
@@ -1846,6 +2030,15 @@ export default function App() {
                                  <div className="h-full flex flex-col items-center justify-center text-slate-700 dark:text-slate-300 space-y-2">
                                     <MessageSquare className="w-8 h-8 opacity-10 text-slate-700 dark:text-slate-300" />
                                     <p className="text-sm">Start a conversation with {formatNameForPrivacy(currentUser?.uid, selectedPartner.uid, selectedPartner.displayName)}</p>
+                                 </div>
+                               )}
+                               {isPartnerTyping && (
+                                 <div className="flex justify-start w-full mb-4">
+                                   <div className="bg-slate-100 dark:bg-[#27272a] text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                                      <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
+                                   </div>
                                  </div>
                                )}
                                <div ref={messagesEndRef} />
@@ -1862,7 +2055,7 @@ export default function App() {
                                <>
                                  <input 
                                    value={newMessage}
-                                   onChange={(e) => setNewMessage(e.target.value)}
+                                   onChange={handleTyping}
                                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                                    placeholder="Type a message..."
                                    readOnly={isSendingMessage}
@@ -1912,7 +2105,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
             >
-              <AdminDashboard currentUser={currentUser} />
+              <AdminDashboard currentUser={currentUser} currentUserProfile={userProfile} showToast={showToast} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -2015,6 +2208,62 @@ export default function App() {
                         </div>
                       )}
                     </div>
+
+                    {currentUser && currentUser.uid !== selectedProfileModal.uid && (() => {
+                       const reqStatus = getRequestStatus(selectedProfileModal.uid);
+                       
+                       if (!reqStatus || reqStatus.status === 'rejected') {
+                         return (
+                           <button onClick={async () => await sendMessageRequest(currentUser.uid, selectedProfileModal.uid)} className="bg-red-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:scale-105 transition-all flex items-center gap-2 w-fit">
+                             <UserPlus className="w-4 h-4" /> Connect
+                           </button>
+                         )
+                       } else if (reqStatus.status === 'pending') {
+                         if (!reqStatus.isSender) {
+                           return (
+                             <div className="flex gap-3">
+                               <button onClick={async () => await updateMessageRequestStatus(reqStatus.req.id, 'accepted')} className="bg-green-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:scale-105 transition-all flex items-center gap-2 w-fit">
+                                 <UserCheck className="w-4 h-4" /> Accept Request
+                               </button>
+                               <button onClick={async () => await updateMessageRequestStatus(reqStatus.req.id, 'rejected')} className="bg-slate-200 dark:bg-[#18181b] border border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-300 dark:hover:bg-[#27272a] transition-all flex items-center gap-2 w-fit">
+                                 Reject
+                               </button>
+                             </div>
+                           )
+                         } else {
+                           return (
+                             <button onClick={async () => await deleteMessageRequest(reqStatus.req.id)} className="bg-slate-200 dark:bg-[#18181b] border border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-300 dark:hover:bg-[#27272a] transition-all flex items-center gap-2 w-fit">
+                               <Hourglass className="w-4 h-4" /> Cancel Request
+                             </button>
+                           )
+                         }
+                       } else if (reqStatus.status === 'accepted') {
+                         return (
+                           <div className="flex gap-3">
+                             <button onClick={() => { setSelectedPartner(selectedProfileModal); setCurrentView('chat'); setSelectedProfileModal(null); }} className="bg-red-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:scale-105 transition-all flex items-center gap-2 w-fit">
+                               <MessageSquare className="w-4 h-4" /> Message
+                             </button>
+                             <button onClick={async () => {
+                                 try {
+                                   await deleteMessageRequest(reqStatus.req.id);
+                                   await deleteChatHistory(currentUser.uid, selectedProfileModal.uid);
+                                   if (activeChatUserIds.includes(selectedProfileModal.uid)) {
+                                     setActiveChatUserIds(prev => prev.filter(id => id !== selectedProfileModal.uid));
+                                   }
+                                   if (selectedPartner?.uid === selectedProfileModal.uid) {
+                                     setSelectedPartner(null);
+                                     setCurrentView('teammates');
+                                   }
+                                 } catch(e) {
+                                   console.error(e);
+                                 }
+                             }} className="bg-slate-200 dark:bg-[#18181b] border border-slate-300 dark:border-slate-800 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-300 dark:hover:bg-[#27272a] transition-all flex items-center gap-2 w-fit">
+                               <UserMinus className="w-4 h-4" /> Unfriend
+                             </button>
+                           </div>
+                         )
+                       }
+                    })()}
 
                     <div className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
                       {selectedProfileModal.bio || "No bio provided."}
@@ -2209,9 +2458,9 @@ export default function App() {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-lg font-medium text-sm flex items-center gap-2"
+            className="fixed top-1/2 md:top-auto bottom-auto md:bottom-6 left-1/2 -translate-y-1/2 md:-translate-y-0 -translate-x-1/2 z-[300] bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-8 py-5 md:px-6 md:py-3 rounded-2xl md:rounded-full shadow-2xl md:shadow-lg font-medium text-lg md:text-sm flex flex-col md:flex-row items-center justify-center gap-4 md:gap-2 w-[85%] max-w-[320px] md:max-w-none md:w-auto text-center md:text-left"
           >
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <div className="w-3 h-3 md:w-2 md:h-2 bg-green-500 rounded-full animate-pulse shrink-0"></div>
             {toastMessage}
           </motion.div>
         )}
@@ -2433,6 +2682,183 @@ export default function App() {
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Support Dialog */}
+      <AnimatePresence>
+        {showSupportDialog && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowSupportDialog(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-full max-w-md bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl z-10"
+            >
+              <button 
+                onClick={() => setShowSupportDialog(false)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <X className="w-5 h-5"/>
+              </button>
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-50 mb-2">Help & Support</h2>
+                  <p className="text-sm text-slate-600 dark:text-slate-400">Describe your query or report a bug.</p>
+                </div>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Type</label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2">
+                        <input type="radio" checked={supportForm.type === 'query'} onChange={() => setSupportForm({...supportForm, type: 'query'})} className="accent-red-600" />
+                        <span className="text-sm text-slate-700 dark:text-slate-300">General Query</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input type="radio" checked={supportForm.type === 'bug'} onChange={() => setSupportForm({...supportForm, type: 'bug'})} className="accent-red-600" />
+                        <span className="text-sm text-slate-700 dark:text-slate-300">Report a Bug</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Title</label>
+                     <input type="text" value={supportForm.title} onChange={e => setSupportForm({...supportForm, title: e.target.value})} className="w-full bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 text-slate-900 dark:text-slate-50" placeholder="Brief summary" />
+                  </div>
+                  <div>
+                     <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">Description</label>
+                     <textarea value={supportForm.description} onChange={e => setSupportForm({...supportForm, description: e.target.value})} className="w-full bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 text-slate-900 dark:text-slate-50 h-32 resize-none" placeholder="Details..." />
+                  </div>
+                </div>
+
+                <div className="flex gap-3 w-full pt-4">
+                  <button 
+                    disabled={isSubmittingSupport}
+                    onClick={() => setShowSupportDialog(false)}
+                    className="flex-1 py-2 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-slate-50 font-medium rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    disabled={!supportForm.title.trim() || !supportForm.description.trim() || isSubmittingSupport}
+                    onClick={async () => {
+                      if (!currentUser) return;
+                      setIsSubmittingSupport(true);
+                      try {
+                        const { createSupportTicket } = await import('./services/firebaseService');
+                        await createSupportTicket({
+                           userId: currentUser.uid,
+                           title: supportForm.title,
+                           description: supportForm.description,
+                           type: supportForm.type
+                        });
+                        showToast('Ticket submitted successfully!');
+                        setShowSupportDialog(false);
+                        setSupportForm({ title: '', description: '', type: 'query' });
+                      } catch(e) {
+                         showToast('Failed to submit ticket.');
+                      } finally {
+                        setIsSubmittingSupport(false);
+                      }
+                    }}
+                    className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition disabled:opacity-50 flex justify-center items-center gap-2"
+                  >
+                    {isSubmittingSupport ? <Loader2 className="w-4 h-4 animate-spin"/> : 'Submit'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Announcement Dismissal Confirmation Dialog */}
+      <AnimatePresence>
+        {announcementToDismiss && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div 
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               exit={{ opacity: 0 }}
+               onClick={() => setAnnouncementToDismiss(null)}
+               className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+               initial={{ opacity: 0, scale: 0.95 }}
+               animate={{ opacity: 1, scale: 1 }}
+               exit={{ opacity: 0, scale: 0.95 }}
+               className="bg-white dark:bg-[#18181b] p-6 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 relative z-10 max-w-sm w-full text-center"
+            >
+              <h3 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-2">Dismiss Announcement</h3>
+              <p className="text-slate-600 dark:text-slate-400 mb-6">Are you sure you want to dismiss this announcement? You won't see it again.</p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setAnnouncementToDismiss(null)}
+                  className="flex-1 px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg font-bold hover:bg-slate-300 dark:hover:bg-slate-700 transition"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={async () => {
+                    if (currentUser && userProfile) {
+                      const updatedProfile = { 
+                        ...userProfile, 
+                        dismissedAnnouncements: [...(userProfile.dismissedAnnouncements || []), announcementToDismiss] 
+                      };
+                      setUserProfile(updatedProfile);
+                      await saveUserProfile(updatedProfile);
+                    }
+                    setAnnouncementToDismiss(null);
+                  }}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Maintenance Popup */}
+      <AnimatePresence>
+        {showMaintenancePopup && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+            <motion.div
+               initial={{ opacity: 0 }}
+               animate={{ opacity: 1 }}
+               exit={{ opacity: 0 }}
+               className="absolute inset-0 bg-[#09090b]/80 backdrop-blur-sm"
+               onClick={() => setShowMaintenancePopup(false)}
+            />
+            <motion.div
+               initial={{ opacity: 0, scale: 0.95 }}
+               animate={{ opacity: 1, scale: 1 }}
+               exit={{ opacity: 0, scale: 0.95 }}
+               className="bg-white dark:bg-[#18181b] p-8 rounded-3xl border border-slate-200 dark:border-[#27272a] shadow-2xl relative z-10 max-w-sm w-full text-center"
+            >
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-500 mx-auto flex items-center justify-center rounded-2xl mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              </div>
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50 mb-2">Under Maintenance</h2>
+              <p className="text-slate-600 dark:text-slate-400 mb-8">
+                MICompete is currently under maintenance. Please check back later!
+              </p>
+              <button
+                onClick={() => setShowMaintenancePopup(false)}
+                className="w-full bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 py-3 rounded-xl font-bold transition-colors"
+              >
+                Okay
+              </button>
             </motion.div>
           </div>
         )}

@@ -13,7 +13,10 @@ import {
   deleteDoc,
   limit,
   collectionGroup,
-  writeBatch
+  writeBatch,
+  startAfter,
+  QueryDocumentSnapshot,
+  updateDoc
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -90,6 +93,18 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
   }
 };
 
+export const listenToUserProfile = (uid: string, callback: (profile: UserProfile | null) => void) => {
+  const path = `users/${uid}`;
+  return onSnapshot(doc(db, 'users', uid), (docSnap) => {
+    if (docSnap.exists()) {
+      const data = docSnap.data() as UserProfile;
+      callback(data.isDeleted ? null : data);
+    } else {
+      callback(null);
+    }
+  }, (error) => handleFirestoreError(error, OperationType.GET, path));
+};
+
 export const saveUserProfile = async (profile: Partial<UserProfile> & { uid: string }) => {
   const path = `users/${profile.uid}`;
   try {
@@ -125,6 +140,43 @@ export const getAllUsers = async (): Promise<UserProfile[]> => {
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
     return [];
+  }
+};
+
+export const getPaginatedUsers = async (
+  pageSize: number,
+  lastDoc: QueryDocumentSnapshot | null = null,
+  filters: { minComps?: number } = {}
+): Promise<{ users: UserProfile[], lastDoc: QueryDocumentSnapshot | null }> => {
+  const path = 'users';
+  try {
+    let q = query(collection(db, 'users'));
+    
+    // We cannot easily do where('isDeleted', '==', false) and where('isPaused', '==', false) 
+    // without composite indexes, which might fail dynamically.
+    // Assuming filters minComps is the main one requiring order
+    if (filters.minComps) {
+      q = query(q, where('competitionCount', '>=', filters.minComps), orderBy('competitionCount', 'desc'));
+    } else {
+      q = query(q, orderBy('uid')); // default ordering
+    }
+    
+    if (lastDoc) {
+      q = query(q, startAfter(lastDoc));
+    }
+    
+    q = query(q, limit(pageSize));
+    
+    const querySnapshot = await getDocs(q);
+    // Since we can't filter out deleted/paused without indexes, we do it in-memory for the fetched page,
+    // Note: this means a page might return fewer than pageSize users.
+    const users = querySnapshot.docs.map(doc => doc.data() as UserProfile).filter(user => !user.isPaused && !user.isDeleted);
+    const newLastDoc = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1] : null;
+    
+    return { users, lastDoc: newLastDoc };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return { users: [], lastDoc: null };
   }
 };
 
@@ -261,6 +313,31 @@ export const listenToMessages = (senderId: string, receiverId: string, callback:
   });
 };
 
+export const setTypingStatus = async (senderId: string, receiverId: string, isTyping: boolean) => {
+  const chatId = [senderId, receiverId].sort().join('_');
+  const path = `typing/${chatId}`;
+  try {
+    await setDoc(doc(db, 'typing', chatId), {
+      [senderId]: isTyping,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  } catch (error) {
+    console.error("Error setting typing status:", error);
+  }
+};
+
+export const listenToTypingStatus = (senderId: string, receiverId: string, callback: (isTyping: boolean) => void) => {
+  const chatId = [senderId, receiverId].sort().join('_');
+  return onSnapshot(doc(db, 'typing', chatId), (docSnap) => {
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      callback(!!data[receiverId]); // Check if the receiver of our messages is typing
+    } else {
+      callback(false);
+    }
+  });
+};
+
 export const endorseSkill = async (endorserId: string, endorseeId: string, skill: string) => {
   const endorsementId = `${endorserId}_${endorseeId}_${skill.replace(/\s+/g, '_')}`;
   const path = `endorsements/${endorsementId}`;
@@ -326,12 +403,32 @@ export const sendMessageRequest = async (senderId: string, receiverId: string) =
 export const updateMessageRequestStatus = async (requestId: string, status: 'accepted' | 'rejected') => {
   const path = `messageRequests/${requestId}`;
   try {
-    const { updateDoc } = await import('firebase/firestore');
     await updateDoc(doc(db, 'messageRequests', requestId), {
       status
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+};
+
+export const deleteMessageRequest = async (requestId: string) => {
+  const path = `messageRequests/${requestId}`;
+  try {
+    await deleteDoc(doc(db, 'messageRequests', requestId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};
+
+export const deleteChatHistory = async (userId1: string, userId2: string) => {
+  const chatId = [userId1, userId2].sort().join('_');
+  const path = `chats/${chatId}/messages`;
+  try {
+    const messagesSnap = await getDocs(collection(db, 'chats', chatId, 'messages'));
+    const deletePromises = messagesSnap.docs.map(messageDoc => deleteDoc(messageDoc.ref));
+    await Promise.all(deletePromises);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
   }
 };
 
@@ -411,5 +508,136 @@ export const deleteReport = async (reportId: string) => {
     await deleteDoc(doc(db, 'reports', reportId));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};
+
+export const createAnnouncement = async (announcement: Partial<import('../types.ts').Announcement>) => {
+  const path = 'announcements';
+  try {
+    const docRef = await addDoc(collection(db, path), {
+      ...announcement,
+      createdAt: serverTimestamp(),
+      active: true
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const updateAnnouncement = async (announcementId: string, updates: Partial<import('../types.ts').Announcement>) => {
+  const path = `announcements/${announcementId}`;
+  try {
+    await updateDoc(doc(db, path), updates);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+};
+
+export const getAllAnnouncements = async () => {
+  const path = 'announcements';
+  try {
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as import('../types.ts').Announcement));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+export const deleteAnnouncement = async (announcementId: string) => {
+  const path = `announcements/${announcementId}`;
+  try {
+    await deleteDoc(doc(db, 'announcements', announcementId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};
+
+export const listenToAnnouncements = (callback: (announcements: import('../types.ts').Announcement[]) => void) => {
+  const path = 'announcements';
+  const q = query(collection(db, path), where('active', '==', true), orderBy('createdAt', 'desc'));
+  
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as import('../types.ts').Announcement)));
+  }, (error) => handleFirestoreError(error, OperationType.LIST, path));
+};
+
+export const getGlobalSettings = async (): Promise<import('../types.ts').GlobalSettings | null> => {
+  const path = 'settings/global';
+  try {
+    const docSnap = await getDoc(doc(db, 'settings', 'global'));
+    if (docSnap.exists()) {
+      return docSnap.data() as import('../types.ts').GlobalSettings;
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+    return null;
+  }
+};
+
+export const saveGlobalSettings = async (settings: Partial<import('../types.ts').GlobalSettings>) => {
+  const path = 'settings/global';
+  try {
+    await setDoc(doc(db, 'settings', 'global'), settings, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+};
+
+export const createSupportTicket = async (ticket: Partial<import('../types.ts').SupportTicket>) => {
+  const path = 'supportTickets';
+  try {
+    await addDoc(collection(db, path), {
+      ...ticket,
+      status: 'open',
+      createdAt: serverTimestamp()
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+};
+
+export const getAllSupportTickets = async (): Promise<import('../types.ts').SupportTicket[]> => {
+  const path = 'supportTickets';
+  try {
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as import('../types.ts').SupportTicket));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+};
+
+export const updateSupportTicketStatus = async (ticketId: string, status: 'open' | 'closed') => {
+  const path = `supportTickets/${ticketId}`;
+  try {
+    const { updateDoc } = await import('firebase/firestore');
+    await updateDoc(doc(db, 'supportTickets', ticketId), { status });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+};
+
+export const deleteSupportTicket = async (ticketId: string) => {
+  const path = `supportTickets/${ticketId}`;
+  try {
+    const { deleteDoc } = await import('firebase/firestore');
+    await deleteDoc(doc(db, 'supportTickets', ticketId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};
+
+export const updateUserRole = async (userId: string, role: string) => {
+  const path = `users/${userId}`;
+  try {
+    const { updateDoc } = await import('firebase/firestore');
+    await updateDoc(doc(db, 'users', userId), { role });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
   }
 };
