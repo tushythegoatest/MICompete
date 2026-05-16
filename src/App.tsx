@@ -22,7 +22,8 @@ import {
   Briefcase,
   Shield,
   Pencil,
-  Flag
+  Flag,
+  Activity
 } from 'lucide-react';
 import { View, UserProfile, Competition, Message, Endorsement } from './types.ts';
 import { auth } from './lib/firebase.ts';
@@ -137,6 +138,14 @@ export default function App() {
   const [reportTarget, setReportTarget] = useState<{ userId: string, displayName: string } | null>(null);
   const [reportReason, setReportReason] = useState('');
   const [isReportingSubmitting, setIsReportingSubmitting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3000);
+  };
 
   const DEFAULT_PROFILE_FORM = {
     displayName: '',
@@ -609,11 +618,11 @@ export default function App() {
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: false, margin: "-100px" }}
                     transition={{ duration: 0.6 }}
-                    className="text-center md:text-left md:flex items-center justify-between gap-12 py-12"
+                    className="text-center md:text-left md:flex items-center justify-between gap-12 py-12 lg:py-24"
                   >
                     <div className="md:w-1/2 space-y-6">
                       <h1 className="text-5xl md:text-7xl font-bold tracking-tight leading-none text-slate-900 dark:text-slate-50">
-                        Compete. Connect. <span className="text-red-600">Conquer.</span>
+                        Compete. Connect. <span className="text-red-500">Conquer.</span>
                       </h1>
                       <p className="text-xl text-slate-700 dark:text-slate-300 max-w-lg mx-auto md:mx-0">
                         Welcome to MICompete. The ultimate platform for MICAns to meet the perfect case comp partner, and discover industry-defining case competitions.
@@ -621,9 +630,9 @@ export default function App() {
                       <div className="flex justify-center md:justify-start">
                          <button 
                           onClick={signInWithGoogle}
-                          className="bg-red-600 text-white px-8 py-4 rounded-xl font-bold hover:scale-105 transition-transform shadow-[0_0_20px_rgba(220,38,38,0.3)] flex items-center gap-2"
+                          className="bg-red-600 text-white px-8 py-4 rounded-xl font-bold hover:scale-105 transition-transform shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] flex items-center gap-2 group"
                         >
-                          Join MICompete <ChevronRight className="w-5 h-5" />
+                          Join MICompete <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                         </button>
                       </div>
                     </div>
@@ -632,28 +641,73 @@ export default function App() {
                       whileInView={{ opacity: 1, scale: 1 }}
                       viewport={{ once: false, margin: "-100px" }}
                       transition={{ duration: 0.6, delay: 0.2 }}
-                      className="mt-12 md:mt-0 md:w-1/2 relative"
+                      className="mt-16 md:mt-0 md:w-1/2 relative"
                     >
-                      <div className="absolute -inset-4 bg-gradient-to-r from-red-600 to-red-500 rounded-[2rem] blur-2xl opacity-20"></div>
-                      <div className="relative rounded-2xl overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 aspect-[4/3]">
-                        <img 
+                      <div className="absolute -inset-4 bg-gradient-to-r from-red-600 to-red-400 rounded-[2.5rem] blur-2xl opacity-20 animate-pulse"></div>
+                      <div className="relative rounded-[2rem] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 aspect-[4/3] group">
+                        <motion.img 
+                          whileHover={{ scale: 1.05 }}
+                          transition={{ duration: 0.7 }}
                           src="https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=2070&auto=format&fit=crop" 
                           alt="Business teamwork"
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
                         />
-                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent flex items-end p-8">
-                           <div className="flex items-center gap-4 bg-white dark:bg-[#09090b]/10 backdrop-blur-md px-6 py-4 rounded-2xl border border-white/20 w-full">
+                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent flex items-end p-6 md:p-8">
+                           <motion.div 
+                             initial={{ y: 20, opacity: 0 }}
+                             whileInView={{ y: 0, opacity: 1 }}
+                             transition={{ delay: 0.4 }}
+                             className="flex items-center gap-4 bg-white/10 dark:bg-[#09090b]/40 backdrop-blur-xl px-6 py-4 rounded-2xl border border-white/20 w-full"
+                           >
                              <div className="w-12 h-12 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center shrink-0">
                                <Trophy className="text-red-400" />
                              </div>
                              <div>
-                               <div className="font-bold text-slate-900 dark:text-white text-xl">15+ events</div>
-                               <div className="text-sm text-slate-700 dark:text-slate-300">are ready to be disrupted</div>
+                               <div className="font-bold text-white text-xl">15+ events</div>
+                               <div className="text-sm text-slate-200">are ready to be disrupted</div>
                              </div>
-                           </div>
+                           </motion.div>
                          </div>
                       </div>
+
+                      {/* Floating Badges */}
+                      <motion.div
+                        animate={{ y: [-10, 10, -10] }}
+                        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                        className="absolute -left-4 md:-left-8 top-1/4 bg-white dark:bg-[#18181b] p-3 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 flex items-center gap-3 z-10"
+                      >
+                         <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold shrink-0">
+                           <span className="text-sm">JD</span>
+                         </div>
+                         <div className="hidden sm:block">
+                           <div className="text-xs font-bold text-slate-900 dark:text-slate-50 leading-tight">Data Analyst</div>
+                           <div className="text-[10px] text-slate-500">Looking for a Strategist</div>
+                         </div>
+                      </motion.div>
+
+                      <motion.div
+                        animate={{ y: [10, -10, 10] }}
+                        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                        className="absolute -right-4 md:-right-8 bottom-1/3 bg-white dark:bg-[#18181b] p-3 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 flex items-center gap-3 z-10"
+                      >
+                         <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold shrink-0">
+                           <span className="text-sm">AS</span>
+                         </div>
+                         <div className="hidden sm:block">
+                           <div className="text-xs font-bold text-slate-900 dark:text-slate-50 leading-tight">Storyteller</div>
+                           <div className="text-[10px] text-slate-500">Connect to win</div>
+                         </div>
+                      </motion.div>
+
+                      <motion.div
+                        animate={{ scale: [1, 1.1, 1] }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                        className="absolute -top-4 -right-4 bg-red-600 text-white rounded-full p-3 shadow-lg z-10"
+                      >
+                         <Activity className="w-5 h-5" />
+                      </motion.div>
+
                     </motion.div>
                   </motion.div>
 
@@ -1524,7 +1578,7 @@ export default function App() {
                  <div className="bg-white dark:bg-[#09090b] backdrop-blur-xl rounded-3xl border border-slate-200 dark:border-[#27272a] p-8 md:p-12 shadow-sm mt-8">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 mb-6">Preferences & Settings</h2>
                     <div className="space-y-6">
-                       <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-[#18181b] rounded-xl border border-slate-200 dark:border-[#27272a]">
+                       <div className="flex items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-[#18181b] rounded-xl border border-slate-200 dark:border-[#27272a]">
                          <div>
                             <div className="font-bold text-slate-900 dark:text-slate-50">Dark Mode</div>
                             <div className="text-sm text-slate-700 dark:text-slate-300">Switch the app to a dark theme.</div>
@@ -1540,13 +1594,13 @@ export default function App() {
                                await saveUserProfile(updated);
                              }
                            }}
-                           className={`w-12 h-6 rounded-full transition-colors relative ${userProfile?.darkMode ? 'bg-red-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                           className={`shrink-0 w-11 h-6 rounded-full transition-colors relative duration-200 ease-in-out flex items-center px-0.5 ${userProfile?.darkMode ? 'bg-red-600' : 'bg-slate-300 dark:bg-slate-700'}`}
                          >
-                           <div className={`w-4 h-4 rounded-full bg-white dark:bg-[#09090b] absolute top-1 transition-transform ${userProfile?.darkMode ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                           <div className={`w-5 h-5 rounded-full shadow-sm bg-white transition-transform duration-200 ease-in-out ${userProfile?.darkMode ? 'translate-x-5' : 'translate-x-0'}`}></div>
                          </button>
                       </div>
 
-                      <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-[#18181b] rounded-xl border border-slate-200 dark:border-[#27272a]">
+                      <div className="flex items-center justify-between gap-4 p-4 bg-slate-50 dark:bg-[#18181b] rounded-xl border border-slate-200 dark:border-[#27272a]">
                          <div>
                             <div className="font-bold text-slate-900 dark:text-slate-50">Pause Account</div>
                             <div className="text-sm text-slate-700 dark:text-slate-300">Temporarily hide your profile from others on Connect.</div>
@@ -1563,9 +1617,9 @@ export default function App() {
                                }
                              }
                            }}
-                           className={`w-12 h-6 rounded-full transition-colors relative ${userProfile?.isPaused ? 'bg-red-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                           className={`shrink-0 w-11 h-6 rounded-full transition-colors relative duration-200 ease-in-out flex items-center px-0.5 ${userProfile?.isPaused ? 'bg-red-600' : 'bg-slate-300 dark:bg-slate-700'}`}
                          >
-                           <div className={`w-4 h-4 rounded-full bg-white dark:bg-[#09090b] absolute top-1 transition-transform ${userProfile?.isPaused ? 'translate-x-7' : 'translate-x-1'}`}></div>
+                           <div className={`w-5 h-5 rounded-full shadow-sm bg-white transition-transform duration-200 ease-in-out ${userProfile?.isPaused ? 'translate-x-5' : 'translate-x-0'}`}></div>
                          </button>
                       </div>
 
@@ -1868,14 +1922,14 @@ export default function App() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="relative bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 md:p-8"
             >
-              <div className="absolute top-6 right-6 flex items-center gap-2">
+              <div className="absolute top-6 right-6 flex items-center gap-2 z-10">
                 {currentUser && currentUser.uid !== selectedProfileModal.uid && (
                   <button 
                     onClick={() => setReportTarget({ userId: selectedProfileModal.uid, displayName: selectedProfileModal.displayName || 'Unknown User' })}
                     title="Report User"
-                    className="text-slate-500 hover:text-red-500 bg-slate-50 dark:bg-[#18181b] p-2 rounded-full transition-colors hidden md:block" // On mobile it might overlap, wait no let's make it block
+                    className="text-slate-500 hover:text-red-500 bg-slate-50 dark:bg-[#18181b] p-2 rounded-full transition-colors"
                   >
-                    <Flag className="w-4 h-4" />
+                    <Flag className="w-5 h-5" />
                   </button>
                 )}
                 <button 
@@ -1885,15 +1939,6 @@ export default function App() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-
-              {currentUser && currentUser.uid !== selectedProfileModal.uid && (
-                <button 
-                  onClick={() => setReportTarget({ userId: selectedProfileModal.uid, displayName: selectedProfileModal.displayName || 'Unknown User' })}
-                  className="absolute top-6 left-6 text-slate-500 hover:text-red-500 bg-slate-50 dark:bg-[#18181b] p-2 rounded-full transition-colors md:hidden"
-                >
-                  <Flag className="w-4 h-4" />
-                </button>
-              )}
 
               <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-center md:items-start mt-8 md:mt-0">
                  <div className="w-32 h-32 rounded-3xl bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 flex items-center justify-center text-4xl font-bold overflow-hidden shrink-0">
@@ -2124,6 +2169,21 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[300] bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-lg font-medium text-sm flex items-center gap-2"
+          >
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Delete Confirmation Dialog */}
       <AnimatePresence>
         {showDeleteConfirmDialog && (
@@ -2325,9 +2385,9 @@ export default function App() {
                       setIsReportingSubmitting(true);
                       try {
                          await reportUser(currentUser.uid, reportTarget.userId, reportReason.trim());
-                         alert(`Your report against ${reportTarget.displayName} has been submitted.`);
+                         showToast(`Your report against ${reportTarget.displayName} has been submitted.`);
                       } catch (error) {
-                         alert("Failed to submit report. Please try again.");
+                         showToast("Failed to submit report. Please try again.");
                       } finally {
                          setIsReportingSubmitting(false);
                          setReportTarget(null);

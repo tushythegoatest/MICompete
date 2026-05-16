@@ -403,3 +403,13 @@ export const updateReportStatus = async (reportId: string, status: 'pending' | '
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
 };
+
+export const deleteReport = async (reportId: string) => {
+  const path = `reports/${reportId}`;
+  try {
+    const { deleteDoc } = await import('firebase/firestore');
+    await deleteDoc(doc(db, 'reports', reportId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+};

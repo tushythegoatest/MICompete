@@ -161,6 +161,7 @@ service cloud.firestore {
       allow update: if isAdmin() && isValidId(reportId)
         && incoming().diff(existing()).affectedKeys().hasOnly(['status'])
         && (incoming().status == 'reviewed' || incoming().status == 'pending');
+      allow delete: if isAdmin() && isValidId(reportId);
     }
   }
 }

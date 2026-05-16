@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { UserProfile, Message, Report } from '../types';
-import { MessageRequest, getAllReports, updateReportStatus } from '../services/firebaseService';
+import { MessageRequest, getAllReports, updateReportStatus, deleteReport } from '../services/firebaseService';
 import { collection, getDocs, collectionGroup, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Users, MessageSquare, Activity, Loader2, X, AlertOctagon, PauseCircle, Trash2, Flag } from 'lucide-react';
+import { Users, MessageSquare, Activity, Loader2, X, AlertOctagon, PauseCircle, Trash2, Flag, BarChart2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminDashboard({ currentUser }: { currentUser: any }) {
@@ -14,6 +14,7 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'messages' | 'reports'>('overview');
 
   useEffect(() => {
     if (currentUser?.email !== 'mail2tushar.jain@gmail.com') return;
@@ -69,213 +70,281 @@ export default function AdminDashboard({ currentUser }: { currentUser: any }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full min-h-[500px]">
         <Loader2 className="w-8 h-8 animate-spin text-red-600" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 relative">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pb-32 md:pb-12 relative">
       <div className="mb-8">
         <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight">Admin Dashboard</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-2">Monitor platform activity and user engagement.</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.4 }}
-          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
-        >
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
-              <Users className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Users</p>
-              <p className="text-3xl font-bold text-slate-900 dark:text-white">{users.length}</p>
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
-        >
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center">
-              <MessageSquare className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Messages</p>
-              <p className="text-3xl font-bold text-slate-900 dark:text-white">{messages.length}</p>
-            </div>
-          </div>
-        </motion.div>
-
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.4, delay: 0.2 }}
-          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
-        >
-          <div className="flex items-center gap-4 mb-4">
-            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center">
-              <Activity className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Connection Requests</p>
-              <p className="text-3xl font-bold text-slate-900 dark:text-white">{requests.length}</p>
-            </div>
-          </div>
-        </motion.div>
+      <div className="flex gap-4 mb-8 overflow-x-auto pb-2">
+        {(['overview', 'users', 'messages', 'reports'] as const).map(tab => (
+          <button 
+            key={tab} 
+            onClick={() => setActiveTab(tab)} 
+            className={`px-6 py-2.5 rounded-full font-bold capitalize whitespace-nowrap transition-colors ${activeTab === tab ? 'bg-red-600 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-[#18181b] dark:text-slate-300 dark:hover:bg-[#27272a]'}`}
+          >
+            {tab}
+          </button>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Recent Users */}
+      {activeTab === 'overview' && (
+        <div className="space-y-8">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
+            >
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Users</p>
+                  <p className="text-3xl font-bold text-slate-900 dark:text-white">{users.length}</p>
+                </div>
+              </div>
+              <button onClick={() => setActiveTab('users')} className="text-red-600 hover:text-red-700 text-sm font-bold mt-4 flex items-center gap-1"><BarChart2 className="w-4 h-4"/> View User Analytics</button>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
+            >
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center">
+                  <MessageSquare className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Messages</p>
+                  <p className="text-3xl font-bold text-slate-900 dark:text-white">{messages.length}</p>
+                </div>
+              </div>
+              <button onClick={() => setActiveTab('messages')} className="text-red-600 hover:text-red-700 text-sm font-bold mt-4 flex items-center gap-1"><BarChart2 className="w-4 h-4"/> View Message Analytics</button>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
+            >
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center">
+                  <Activity className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Connection Requests</p>
+                  <p className="text-3xl font-bold text-slate-900 dark:text-white">{requests.length}</p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'users' && (
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.4, delay: 0.3 }}
-          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-[500px] flex flex-col"
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-[#18181b] p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl min-h-[600px] flex flex-col"
         >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Recent Users</h2>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-8 border-b border-slate-200 dark:border-slate-800 pb-6">
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3"><Users className="w-8 h-8 text-blue-500" /> Recent Users</h2>
+              <p className="text-slate-500 dark:text-slate-400 mt-2">Detailed user registration and activity tracking</p>
+            </div>
+            <div className="flex gap-4 w-full sm:w-auto">
+               <div className="flex-1 sm:flex-none bg-slate-50 dark:bg-[#27272a] p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
+                 <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Active</p>
+                 <p className="text-xl font-black text-green-500">{users.filter(u => !u.isDeleted && !u.isPaused && !u.isBlocked).length}</p>
+               </div>
+               <div className="flex-1 sm:flex-none bg-slate-50 dark:bg-[#27272a] p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
+                 <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Blocked</p>
+                 <p className="text-xl font-black text-purple-500">{users.filter(u => u.isBlocked).length}</p>
+               </div>
+            </div>
           </div>
-          <div className="mb-4">
+          <div className="mb-6">
              <input 
                 type="text" 
                 placeholder="Search by name or email..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 rounded-lg px-4 py-2 text-sm focus:ring-1 focus:ring-red-600 text-slate-900 dark:text-slate-50 placeholder-slate-500 transition-all outline-none"
+                className="w-full max-w-md bg-slate-50 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3 focus:ring-2 focus:ring-red-600 text-slate-900 dark:text-slate-50 placeholder-slate-500 transition-all outline-none"
              />
           </div>
-          <div className="overflow-y-auto flex-1 space-y-4 pr-2 cursor-pointer">
+          <div className="overflow-y-auto flex-1 space-y-4 pr-4 cursor-pointer">
             {users.filter(u => u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase())).map(user => (
               <motion.div 
                 key={user.uid} 
                 initial={{ opacity: 0, x: -10 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 onClick={() => setSelectedUser(user)}
-                className={`flex gap-4 items-center p-3 rounded-xl transition-colors ${selectedUser?.uid === user.uid ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900/40 border' : 'hover:bg-slate-50 dark:hover:bg-[#27272a]'}`}
+                className={`flex gap-4 sm:gap-6 items-center p-4 rounded-2xl transition-all shadow-sm ${selectedUser?.uid === user.uid ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900/40 border-2 scale-[1.01]' : 'bg-slate-50 border border-slate-100 dark:border-slate-800 dark:bg-[#27272a] hover:border-red-300 dark:hover:border-red-800'}`}
               >
-                <div className="w-10 h-10 bg-red-100 text-red-600 rounded-full flex items-center justify-center font-bold">
+                <div className="shrink-0 w-12 h-12 sm:w-14 sm:h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center font-bold text-xl shadow-inner">
                   {user.displayName.charAt(0)}
                 </div>
-                <div>
-                  <p className="font-medium text-slate-900 dark:text-white">{user.displayName}</p>
-                  <p className="text-xs text-slate-500">{user.email}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-lg text-slate-900 dark:text-white truncate">{user.displayName}</p>
+                  <p className="text-sm text-slate-500 truncate">{user.email}</p>
                 </div>
-                <div className="ml-auto text-xs font-medium space-y-1 text-right">
-                  {user.isDeleted ? <div className="text-red-500">Deleted</div> : null}
-                  {user.isPaused ? <div className="text-yellow-500">Paused</div> : null}
-                  {user.isBlocked ? <div className="text-purple-500">Blocked</div> : null}
-                  {!user.isDeleted && !user.isPaused && !user.isBlocked && <div className="text-green-500">Active</div>}
+                <div className="shrink-0 ml-auto flex gap-4 md:gap-6 text-sm text-slate-500 items-center">
+                  <div className="hidden md:block text-right">
+                     <p className="font-semibold text-slate-900 dark:text-slate-300">Degree</p>
+                     <p>{user.degree || 'N/A'}</p>
+                  </div>
+                  <div className="text-right font-medium flex flex-col gap-1 items-end">
+                    {user.isDeleted ? <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs">Deleted</span> : null}
+                    {user.isPaused ? <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs">Paused</span> : null}
+                    {user.isBlocked ? <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs">Blocked</span> : null}
+                    {!user.isDeleted && !user.isPaused && !user.isBlocked && <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs">Active</span>}
+                  </div>
                 </div>
               </motion.div>
             ))}
           </div>
         </motion.div>
+      )}
 
-        {/* Recent Messages */}
+      {activeTab === 'messages' && (
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.4, delay: 0.4 }}
-          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-[500px] flex flex-col"
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-[#18181b] p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl min-h-[600px] flex flex-col"
         >
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6">Recent Messages</h2>
-          <div className="overflow-y-auto flex-1 space-y-4 pr-2">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-8 border-b border-slate-200 dark:border-slate-800 pb-6">
+             <div>
+               <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3"><MessageSquare className="w-8 h-8 text-green-500" /> Recent Messages</h2>
+               <p className="text-slate-500 dark:text-slate-400 mt-2">Platform-wide chat activity stream</p>
+             </div>
+             <div className="w-full sm:w-auto bg-slate-50 dark:bg-[#27272a] p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
+                 <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Messages Scanned</p>
+                 <p className="text-xl font-black text-slate-900 dark:text-white">{messages.length}</p>
+             </div>
+          </div>
+          <div className="overflow-y-auto flex-1 space-y-4 pr-4">
             {messages.map((msg, i) => {
               const sender = users.find(u => u.uid === msg.senderId);
               const receiver = users.find(u => u.uid === msg.receiverId);
               return (
-                <motion.div key={i} initial={{ opacity: 0, x: 10 }} whileInView={{ opacity: 1, x: 0 }} className="p-3 bg-slate-50 dark:bg-[#27272a] rounded-xl border border-slate-100 dark:border-slate-800">
-                  <div className="flex justify-between items-center mb-2">
-                     <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                        {sender?.displayName || 'Unknown'} → {receiver?.displayName || 'Unknown'}
+                <motion.div key={i} initial={{ opacity: 0, x: 10 }} whileInView={{ opacity: 1, x: 0 }} className="p-5 bg-slate-50 dark:bg-[#27272a] rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+                  <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center gap-3 mb-3">
+                     <p className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                        <span className="text-red-600 dark:text-red-400">{sender?.displayName || 'Unknown'}</span> 
+                        <span className="text-slate-400 px-2">→</span> 
+                        <span className="text-blue-600 dark:text-blue-400">{receiver?.displayName || 'Unknown'}</span>
                      </p>
-                     <span className="text-[10px] text-slate-400">{new Date(msg.createdAt?.toDate?.() || msg.createdAt).toLocaleDateString()}</span>
+                     <span className="text-xs font-semibold text-slate-400 bg-white dark:bg-[#18181b] px-3 py-1 rounded-full">{new Date(msg.createdAt?.toDate?.() || msg.createdAt).toLocaleString()}</span>
                   </div>
-                  <p className="text-sm text-slate-800 dark:text-slate-200">{msg.text}</p>
+                  <p className="text-base text-slate-900 dark:text-slate-100 bg-white dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 p-4 rounded-xl shadow-sm">{msg.text}</p>
                 </motion.div>
               );
             })}
             {messages.length === 0 && (
-              <p className="text-sm text-slate-500 text-center py-8">No messages found.</p>
+              <p className="text-lg text-slate-500 text-center py-12">No messages found.</p>
             )}
           </div>
         </motion.div>
+      )}
 
-        {/* Reported Users */}
+      {activeTab === 'reports' && (
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.4, delay: 0.5 }}
-          className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-[500px] flex flex-col"
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-[#18181b] p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl min-h-[600px] flex flex-col"
         >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Flag className="w-5 h-5 text-red-500" />
-              Reported Users
-            </h2>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-8 border-b border-slate-200 dark:border-slate-800 pb-6">
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+                <Flag className="w-8 h-8 text-red-500" />
+                Reported Users
+              </h2>
+              <p className="text-slate-500 dark:text-slate-400 mt-2">Manage user moderation requests</p>
+            </div>
+            <div className="w-full sm:w-auto bg-slate-50 dark:bg-[#27272a] p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
+                 <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-1">Pending Reports</p>
+                 <p className="text-xl font-black text-red-500">{reports.filter(r => r.status === 'pending').length}</p>
+            </div>
           </div>
-          <div className="overflow-y-auto flex-1 space-y-4 pr-2">
+          <div className="overflow-y-auto flex-1 space-y-6 pr-4">
             {reports.map((report, i) => {
               const reporter = users.find(u => u.uid === report.reporterId);
               const reported = users.find(u => u.uid === report.reportedId);
               return (
-                <motion.div key={i} initial={{ opacity: 0, x: 10 }} whileInView={{ opacity: 1, x: 0 }} className={`p-4 rounded-xl border transition-colors ${report.status === 'pending' ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30' : 'bg-slate-50 dark:bg-[#27272a] border-slate-100 dark:border-slate-800'}`}>
-                  <div className="flex justify-between items-start mb-2">
-                     <div className="text-xs font-semibold text-slate-900 dark:text-slate-100">
-                        <button onClick={() => reported && setSelectedUser(reported)} className="hover:underline text-red-600 dark:text-red-400">
+                <motion.div key={i} initial={{ opacity: 0, x: 10 }} whileInView={{ opacity: 1, x: 0 }} className={`p-6 rounded-2xl border-2 transition-all ${report.status === 'pending' ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30 shadow-md' : 'bg-slate-50 dark:bg-[#27272a] border-slate-100 dark:border-slate-800'}`}>
+                  <div className="flex flex-col sm:flex-row justify-between items-start mb-4 gap-3">
+                     <div className="font-bold text-slate-900 dark:text-slate-100 text-lg">
+                        <button onClick={() => reported && setSelectedUser(reported)} className="hover:underline text-red-600 dark:text-red-400 decoration-2 underline-offset-2">
                            {reported?.displayName || 'Unknown'}
                         </button>
-                        <span className="text-slate-500 font-normal ml-1">reported by</span> {reporter?.displayName || 'Unknown'}
+                        <span className="text-slate-500 font-normal text-sm mx-2">reported by</span> <span className="text-sm">{reporter?.displayName || 'Unknown'}</span>
                      </div>
-                     <span className="text-[10px] text-slate-400 whitespace-nowrap ml-2 bg-white dark:bg-[#18181b] px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                     <span className={`text-xs font-black uppercase tracking-wider px-3 py-1 rounded-full border ${report.status === 'pending' ? 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/40 dark:text-red-300 dark:border-red-800 box-content' : 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/40 dark:border-green-800 dark:text-green-300'}`}>
                        {report.status}
                      </span>
                   </div>
-                  <p className="text-sm text-slate-700 dark:text-slate-300 bg-white dark:bg-[#18181b] p-2 rounded-lg border border-slate-100 dark:border-slate-800 font-medium italic">"{report.reason}"</p>
+                  <div className="bg-white dark:bg-[#18181b] p-4 rounded-xl border border-slate-100 dark:border-slate-800 relative">
+                     <div className="absolute top-0 left-0 w-1 h-full bg-slate-300 dark:bg-slate-700 rounded-l-xl"></div>
+                     <p className="text-base text-slate-800 dark:text-slate-200 font-medium italic pl-4">"{report.reason}"</p>
+                  </div>
                   
-                  {report.status === 'pending' && (
-                    <button 
-                      onClick={async () => {
-                        if (report.id) {
-                          await updateReportStatus(report.id, 'reviewed');
-                          setReports(reports.map(r => r.id === report.id ? { ...r, status: 'reviewed' } : r));
-                        }
-                      }}
-                      className="mt-3 text-xs w-full bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 py-2 rounded-lg font-bold hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors"
-                    >
-                      Mark as Reviewed
-                    </button>
-                  )}
+                  <div className="flex gap-4 mt-6">
+                    {report.status === 'pending' && (
+                      <button 
+                        onClick={async () => {
+                          if (report.id) {
+                            await updateReportStatus(report.id, 'reviewed');
+                            setReports(reports.map(r => r.id === report.id ? { ...r, status: 'reviewed' } : r));
+                          }
+                        }}
+                        className="flex-1 bg-slate-900 dark:bg-slate-50 text-white dark:text-slate-900 py-3 rounded-xl font-bold hover:bg-slate-800 dark:hover:bg-slate-200 transition-all shadow-sm"
+                      >
+                        Mark as Reviewed
+                      </button>
+                    )}
+                    {report.status === 'reviewed' && (
+                      <button 
+                        onClick={async () => {
+                          if (report.id) {
+                            await deleteReport(report.id);
+                            setReports(reports.filter(r => r.id !== report.id));
+                          }
+                        }}
+                        className="flex-1 bg-white border-2 border-red-200 dark:bg-[#18181b] dark:border-red-900/40 text-red-600 dark:text-red-400 py-3 rounded-xl font-bold hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                      >
+                        <div className="flex items-center justify-center gap-2">
+                           <Trash2 className="w-5 h-5"/> Delete Report
+                        </div>
+                      </button>
+                    )}
+                  </div>
                 </motion.div>
               );
             })}
             {reports.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-12 text-slate-500">
-                <Flag className="w-8 h-8 mb-2 opacity-20" />
-                <p className="text-sm">No reports found.</p>
+              <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                  <Flag className="w-8 h-8 opacity-40" />
+                </div>
+                <p className="text-lg font-medium">No reports found.</p>
               </div>
             )}
           </div>
         </motion.div>
-      </div>
+      )}
 
       {/* User Details Modal/Sidebar */}
       <AnimatePresence>
