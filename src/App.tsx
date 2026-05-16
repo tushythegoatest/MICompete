@@ -177,6 +177,39 @@ export default function App() {
   const [showPauseConfirmDialog, setShowPauseConfirmDialog] = useState(false);
 
   useEffect(() => {
+    const isModalOpen = !!(
+      selectedProfileModal ||
+      reportTarget ||
+      showSignOutConfirmDialog ||
+      showDeleteConfirmDialog ||
+      showDeleteProgressDialog ||
+      showPauseConfirmDialog ||
+      showProfileSavedSplash ||
+      (!userProfile && currentUser) // Onboarding screen
+    );
+
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [
+    selectedProfileModal,
+    reportTarget,
+    showSignOutConfirmDialog,
+    showDeleteConfirmDialog,
+    showDeleteProgressDialog,
+    showPauseConfirmDialog,
+    showProfileSavedSplash,
+    userProfile,
+    currentUser
+  ]);
+
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
