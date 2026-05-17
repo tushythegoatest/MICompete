@@ -29,6 +29,7 @@ import {
   UserPlus,
   UserCheck,
   Hourglass,
+  Sparkles,
 } from "lucide-react";
 import {
   View,
@@ -147,6 +148,9 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
+  const [sentMessages, setSentMessages] = useState<Message[]>([]);
+  const [messageRequests, setMessageRequests] = useState<MessageRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   // Replaced with React Query:
   // const [allTeammates, setAllTeammates] = useState<UserProfile[]>([]);
@@ -179,13 +183,14 @@ export default function App() {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [userCampaigns, userProfile, currentUser]);
 
-  const [activeChatUserIds, setActiveChatUserIds] = useState<string[]>([]);
+  const [connectionProfiles, setConnectionProfiles] = useState<
+    Record<string, UserProfile>
+  >({});
+
   const [selectedPartner, setSelectedPartner] = useState<UserProfile | null>(
     null,
   );
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
-  const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
-  const [sentMessages, setSentMessages] = useState<Message[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -201,7 +206,6 @@ export default function App() {
   useEffect(() => {
     scrollToBottom();
   }, [chatMessages.length, selectedPartner]);
-  const [messageRequests, setMessageRequests] = useState<MessageRequest[]>([]);
   const [totalUnreadMessages, setTotalUnreadMessages] = useState(0);
   const [newMessage, setNewMessage] = useState("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -289,6 +293,36 @@ export default function App() {
   const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
 
   const [showMaintenancePopup, setShowMaintenancePopup] = useState(false);
+  const [isEnhancingBio, setIsEnhancingBio] = useState(false);
+
+  const handleEnhanceBio = async () => {
+    if (!profileForm.bio.trim()) {
+      setProfileError("Please enter some text in the bio first.");
+      return;
+    }
+    setIsEnhancingBio(true);
+    try {
+      const res = await fetch("/api/ai/enhance-bio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bio: profileForm.bio,
+          skills: profileForm.skills,
+          degree: profileForm.degree,
+        }),
+      });
+      const data = await res.json();
+      if (data.enhancedBio) {
+        setProfileForm((prev) => ({ ...prev, bio: data.enhancedBio }));
+        showToast("Bio enhanced by AI!");
+      }
+    } catch (e) {
+      console.error("AI Error:", e);
+      showToast("AI enhancement failed.");
+    } finally {
+      setIsEnhancingBio(false);
+    }
+  };
 
   useEffect(() => {
     const isModalOpen = !!(
@@ -538,11 +572,13 @@ export default function App() {
   }, [currentUser]);
 
   const teammatesQuery = useInfiniteQuery({
-    queryKey: ["teammates", currentUser?.uid],
+    queryKey: ["teammates", currentUser?.uid, filterMinComps],
     initialPageParam: null as any,
     queryFn: async ({ pageParam = null as any }) => {
       if (!currentUser) return { users: [], lastDoc: null, hasMore: false };
-      const { users, lastDoc } = await getPaginatedUsers(20, pageParam);
+      const { users, lastDoc } = await getPaginatedUsers(20, pageParam, {
+        minComps: filterMinComps ? parseInt(filterMinComps) : undefined,
+      });
       const teammates = users.filter(
         (u: UserProfile) => u.uid !== currentUser.uid,
       );
@@ -565,28 +601,59 @@ export default function App() {
     teammatesQuery.data?.pages.flatMap((page: any) => page.users) || [];
   const hasMoreTeammates = teammatesQuery.hasNextPage;
 
+  const activeChatUserIds = React.useMemo(() => {
+    const uids = new Set<string>();
+    receivedMessages.forEach((m) => uids.add(m.senderId));
+    sentMessages.forEach((m) => uids.add(m.receiverId));
+    messageRequests.forEach((r) => {
+      if (r.status === "accepted") {
+        uids.add(r.senderId);
+        uids.add(r.receiverId);
+      }
+    });
+    uids.delete(currentUser?.uid || "");
+    return Array.from(uids);
+  }, [receivedMessages, sentMessages, messageRequests, currentUser?.uid]);
+
+  useEffect(() => {
+    const missingUids = activeChatUserIds.filter(
+      (uid) =>
+        !connectionProfiles[uid] && !allTeammates.some((t) => t.uid === uid),
+    );
+
+    if (missingUids.length > 0 && currentUser) {
+      const fetchMissing = async () => {
+        const newProfiles: Record<string, UserProfile> = {
+          ...connectionProfiles,
+        };
+        await Promise.all(
+          missingUids.map(async (uid) => {
+            try {
+              const profile = await getUserProfile(uid);
+              if (profile) newProfiles[uid] = profile;
+            } catch (e) {}
+          }),
+        );
+        setConnectionProfiles(newProfiles);
+      };
+      fetchMissing();
+    }
+  }, [activeChatUserIds, allTeammates, currentUser, connectionProfiles]);
+
+  const sidebarTeammates = React.useMemo(() => {
+    const teammateMap = new Map<string, UserProfile>();
+    allTeammates.forEach((t) => teammateMap.set(t.uid, t));
+    Object.values(connectionProfiles).forEach((p) => teammateMap.set(p.uid, p));
+    return Array.from(teammateMap.values());
+  }, [allTeammates, connectionProfiles]);
+
   const loadMoreTeammates = () => {
     if (teammatesQuery.hasNextPage && !teammatesQuery.isFetchingNextPage)
       teammatesQuery.fetchNextPage();
   };
 
-  useEffect(() => {
-    if (!currentUser || allTeammates.length === 0) return;
-    const checkChats = async () => {
-      const activeChatsPromises = allTeammates.map(async (t) => {
-        const hasChat = await checkChatExists(currentUser.uid, t.uid);
-        return hasChat ? t.uid : null;
-      });
-      const activeChats = (await Promise.all(activeChatsPromises)).filter(
-        Boolean,
-      ) as string[];
-      setActiveChatUserIds((prev) =>
-        Array.from(new Set([...prev, ...activeChats])),
-      );
-    };
-    checkChats();
-  }, [allTeammates.length, currentUser]);
-
+  // Chat visibility logic is now derived from messages and requests
+  
   const getRequestStatus = (otherId: string) => {
     if (!currentUser) return null;
     const req = messageRequests.find(
@@ -717,9 +784,6 @@ export default function App() {
       await sendMessage(currentUser.uid, selectedPartner.uid, newMessage);
       setTypingStatus(currentUser.uid, selectedPartner.uid, false);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      if (!activeChatUserIds.includes(selectedPartner.uid)) {
-        setActiveChatUserIds((prev) => [...prev, selectedPartner.uid]);
-      }
       setNewMessage("");
     } catch (err) {
       console.error(err);
@@ -2447,9 +2511,24 @@ export default function App() {
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">
-                          Bio <span className="text-red-500">*</span>
-                        </label>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">
+                            Bio <span className="text-red-500">*</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handleEnhanceBio}
+                            disabled={isEnhancingBio}
+                            className="text-[10px] font-bold text-red-600 hover:text-red-700 disabled:opacity-50 flex items-center gap-1 uppercase tracking-wider"
+                          >
+                            {isEnhancingBio ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-3 h-3" />
+                            )}
+                            Enhance with AI
+                          </button>
+                        </div>
                         <textarea
                           value={profileForm.bio || ""}
                           onChange={(e) =>
@@ -2820,7 +2899,7 @@ export default function App() {
                   </h3>
                 </div>
                 <div className="overflow-y-auto h-full pb-32">
-                  {allTeammates
+                  {sidebarTeammates
                     .filter((t) => {
                       const req = getRequestStatus(t.uid);
                       const hasActiveChat = activeChatUserIds.includes(t.uid);
@@ -4265,15 +4344,6 @@ export default function App() {
                           currentUser.uid,
                           unfriendTarget.profile.uid,
                         );
-                        if (
-                          activeChatUserIds.includes(unfriendTarget.profile.uid)
-                        ) {
-                          setActiveChatUserIds((prev) =>
-                            prev.filter(
-                              (id) => id !== unfriendTarget.profile.uid,
-                            ),
-                          );
-                        }
                         if (
                           selectedPartner?.uid === unfriendTarget.profile.uid
                         ) {

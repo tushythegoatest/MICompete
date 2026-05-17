@@ -26,7 +26,14 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.size() > 0;
+      return id is string 
+        && id.size() <= 128 
+        && id.size() > 0 
+        && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
     }
 
     function incoming() {
@@ -42,8 +49,10 @@ service cloud.firestore {
     }
 
     function isValidUserProfile(data) {
-      return data.keys().hasAll(['uid', 'displayName', 'email', 'createdAt', 'degree', 'collegeName', 'experienceYears', 'competitionCount', 'bio', 'skills', 'isDeleted', 'isPaused'])
+      let requiredFields = ['uid', 'displayName', 'email', 'createdAt', 'degree', 'collegeName', 'experienceYears', 'competitionCount', 'bio', 'skills', 'isDeleted', 'isPaused'];
+      return data.keys().hasAll(requiredFields)
         && data.uid == request.auth.uid
+        && isEmailVerified()
         && data.displayName is string && data.displayName.size() <= 100 && data.displayName.size() >= 0
         && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2000))
         && (!('gender' in data) || (data.gender is string && data.gender.size() <= 50))
@@ -56,13 +65,13 @@ service cloud.firestore {
         && (!('isFresher' in data) || (data.isFresher is bool))
         && (!('companyName' in data) || (data.companyName is string && data.companyName.size() <= 1000))
         && (!('jobRole' in data) || (data.jobRole is string && data.jobRole.size() <= 1000))
-        && (!('role' in data) || (data.role is string && data.role.size() <= 1000))
-        && (!('workExperiences' in data) || (data.workExperiences is list && data.workExperiences.size() <= 5))
+        && (!('role' in data) || (data.role is string && data.role.size() <= 50))
+        && (!('workExperiences' in data) || (data.workExperiences is list && data.workExperiences.size() <= 10))
         && (!('isPaused' in data) || (data.isPaused is bool))
         && (!('isDeleted' in data) || (data.isDeleted is bool))
         && (!('isBlocked' in data) || (data.isBlocked is bool))
-        && (!('dismissedAnnouncements' in data) || (data.dismissedAnnouncements is list))
-        && (!('dismissedCampaigns' in data) || (data.dismissedCampaigns is list))
+        && (!('dismissedAnnouncements' in data) || (data.dismissedAnnouncements is list && data.dismissedAnnouncements.size() <= 100))
+        && (!('dismissedCampaigns' in data) || (data.dismissedCampaigns is list && data.dismissedCampaigns.size() <= 100))
         && (!('lastActiveAt' in data) || (data.lastActiveAt is timestamp))
         && data.competitionCount is number && data.competitionCount >= 0
         && data.skills is list && data.skills.size() <= 50
@@ -71,7 +80,9 @@ service cloud.firestore {
 
     function isValidChatMessage(data) {
       return data.keys().hasAll(['text', 'senderId', 'receiverId', 'createdAt', 'isRead'])
+        && data.keys().size() == 5
         && data.senderId == request.auth.uid
+        && isEmailVerified()
         && data.receiverId is string && isValidId(data.receiverId)
         && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
         && data.isRead is bool
@@ -80,7 +91,9 @@ service cloud.firestore {
 
     function isValidEndorsement(data) {
       return data.keys().hasAll(['endorserId', 'endorseeId', 'skill', 'createdAt'])
+        && data.keys().size() == 4
         && data.endorserId == request.auth.uid
+        && isEmailVerified()
         && data.endorseeId is string && isValidId(data.endorseeId)
         && data.skill is string && data.skill.size() > 0 && data.skill.size() <= 50
         && data.createdAt == request.time;
@@ -150,13 +163,13 @@ service cloud.firestore {
     match /messageRequests/{requestId} {
       allow read: if isSignedIn() && isValidId(requestId) && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid || isAdmin());
       allow list: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && isValidId(requestId) 
+      allow create: if isSignedIn() && isValidId(requestId) && isEmailVerified()
         && incoming().senderId == request.auth.uid 
         && incoming().keys().hasAll(['senderId', 'receiverId', 'status', 'createdAt'])
         && incoming().size() == 4
         && incoming().status == 'pending'
         && incoming().createdAt == request.time;
-      allow update: if isSignedIn() && isValidId(requestId)
+      allow update: if isSignedIn() && isValidId(requestId) && isEmailVerified()
         && (
            // receiver can accept or reject
            (existing().receiverId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status']) && (incoming().status == 'accepted' || incoming().status == 'rejected'))
@@ -168,7 +181,7 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow read: if isModerator();
       allow list: if isModerator();
-      allow create: if isSignedIn() && isValidId(reportId)
+      allow create: if isSignedIn() && isValidId(reportId) && isEmailVerified()
         && incoming().reporterId == request.auth.uid
         && incoming().keys().hasAll(['reporterId', 'reportedId', 'reason', 'status', 'createdAt'])
         && incoming().size() == 5
@@ -206,7 +219,7 @@ service cloud.firestore {
     match /supportTickets/{ticketId} {
       allow read: if isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow list: if isModerator() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn() && isValidId(ticketId) && incoming().userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(ticketId) && isEmailVerified() && incoming().userId == request.auth.uid;
       allow update: if isModerator() && isValidId(ticketId);
       allow delete: if isModerator() && isValidId(ticketId);
     }
