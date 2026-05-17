@@ -425,8 +425,8 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                    onChange={(e) => setStatusFilter(e.target.value as any)}
                    className="w-full bg-slate-50 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3 focus:ring-2 focus:ring-red-600 text-slate-900 dark:text-slate-50 transition-all outline-none cursor-pointer font-medium"
                 >
-                  <option value="all">Active Only</option>
-                  <option value="active">Active Residents</option>
+                  <option value="all">All Users</option>
+                  <option value="active">Active Users</option>
                   <option value="deleted">Soft Deleted</option>
                   <option value="blocked">Blocked Users</option>
                   <option value="paused">Paused Accounts</option>
@@ -454,16 +454,19 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                 initial={{ opacity: 0, x: -10 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 onClick={() => setSelectedUser(user)}
-                className={`flex gap-4 sm:gap-6 items-center p-4 rounded-2xl transition-all shadow-sm ${selectedUser?.uid === user.uid ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900/40 border-2 scale-[1.01]' : 'bg-slate-50 border border-slate-100 dark:border-slate-800 dark:bg-[#27272a] hover:border-red-300 dark:hover:border-red-800'}`}
+                className={`flex flex-col sm:flex-row gap-4 sm:gap-6 items-start sm:items-center p-4 rounded-2xl transition-all shadow-sm cursor-pointer ${selectedUser?.uid === user.uid ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-900/40 border-2 scale-[1.01]' : 'bg-slate-50 border border-slate-100 dark:border-slate-800 dark:bg-[#27272a] hover:border-red-300 dark:hover:border-red-800'}`}
               >
-                <div className="shrink-0 w-12 h-12 sm:w-14 sm:h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center font-bold text-xl shadow-inner">
-                  {user.displayName.charAt(0)}
+                <div className="flex items-center gap-4 w-full sm:w-auto flex-1 min-w-0">
+                  <div className="shrink-0 w-12 h-12 sm:w-14 sm:h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center font-bold text-xl shadow-inner">
+                    {user.displayName.charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-lg text-slate-900 dark:text-white truncate">{user.displayName || 'Unknown'}</p>
+                    <p className="text-sm text-slate-500 truncate">{user.email || 'No email'}</p>
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-lg text-slate-900 dark:text-white truncate">{user.displayName}</p>
-                  <p className="text-sm text-slate-500 truncate">{user.email}</p>
-                </div>
-                <div className="shrink-0 ml-auto flex gap-4 md:gap-6 text-sm text-slate-500 items-center">
+                
+                <div className="flex w-full sm:w-auto items-center justify-between sm:justify-end gap-4 md:gap-6 text-sm text-slate-500 pt-3 sm:pt-0 mt-2 sm:mt-0 border-t border-slate-200 dark:border-slate-800 sm:border-0">
                   <div className="flex flex-col items-center justify-center min-w-[80px]">
                      {user.role === 'admin' ? (
                         <div className="flex flex-col items-center gap-1 text-red-600 dark:text-red-400">
@@ -482,7 +485,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                         </div>
                      )}
                   </div>
-                  <div className="text-right font-medium flex flex-col gap-1 items-end">
+                  <div className="text-right font-medium flex flex-wrap gap-1 justify-end">
                     {user.isDeleted ? <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs">Deleted</span> : null}
                     {user.isPaused ? <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs">Paused</span> : null}
                     {user.isBlocked ? <span className="bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-xs">Blocked</span> : null}
