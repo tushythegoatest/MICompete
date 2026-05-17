@@ -56,6 +56,37 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["senderId", "receiverId", "status", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "Admin activity history",
+      "type": "object",
+      "properties": {
+        "adminId": { "type": "string" },
+        "adminName": { "type": "string" },
+        "action": { "type": "string" },
+        "targetUserId": { "type": "string" },
+        "targetUserName": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminId", "adminName", "action", "createdAt"]
+    },
+    "Campaign": {
+      "title": "Campaign",
+      "description": "Targeted Campaign Data",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "targetUserIds": { "type": "array", "items": { "type": "string" } },
+        "sentCount": { "type": "integer" },
+        "status": { "type": "string", "enum": ["active", "completed", "draft", "paused"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "creatorId", "creatorName", "targetUserIds", "sentCount", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -74,6 +105,14 @@
     "/messageRequests/{requestId}": {
       "schema": "MessageRequest",
       "description": "Requests to connect"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Audit Logs"
+    },
+    "/campaigns/{campaignId}": {
+      "schema": "Campaign",
+      "description": "Targeted Campaigns"
     }
   }
 }

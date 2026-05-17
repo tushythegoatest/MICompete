@@ -68,6 +68,7 @@ import {
   reportUser,
   setTypingStatus,
   listenToTypingStatus,
+  listenToTargetedCampaigns,
 } from "./services/firebaseService.ts";
 
 import { Navbar } from "./components/layout/Navbar.tsx";
@@ -161,11 +162,23 @@ export default function App() {
     string | null
   >(null);
 
+  const [userCampaigns, setUserCampaigns] = useState<import("./types").Campaign[]>([]);
+  const [campaignToDismiss, setCampaignToDismiss] = useState<string | null>(null);
+
   const visibleAnnouncements = React.useMemo(() => {
+    if (!currentUser || !userProfile) return [];
     return announcements.filter(
       (a) => a.id && !userProfile?.dismissedAnnouncements?.includes(a.id),
     );
-  }, [announcements, userProfile?.dismissedAnnouncements]);
+  }, [announcements, userProfile, currentUser]);
+
+  const visibleCampaigns = React.useMemo(() => {
+    if (!currentUser || !userProfile) return [];
+    return userCampaigns
+      .filter((c) => c.id && !userProfile?.dismissedCampaigns?.includes(c.id))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [userCampaigns, userProfile, currentUser]);
+
   const [activeChatUserIds, setActiveChatUserIds] = useState<string[]>([]);
   const [selectedPartner, setSelectedPartner] = useState<UserProfile | null>(
     null,
@@ -290,20 +303,20 @@ export default function App() {
       showSupportDialog ||
       showMaintenancePopup ||
       announcementToDismiss !== null ||
-      (!userProfile && currentUser) // Onboarding screen
+      visibleCampaigns.length > 0
     );
 
     if (isModalOpen) {
       document.body.style.overflow = "hidden";
-      document.documentElement.style.overflow = "hidden";
+      document.body.style.paddingRight = "0px"; // Prevent layout shift if possible
     } else {
       document.body.style.overflow = "";
-      document.documentElement.style.overflow = "";
+      document.body.style.paddingRight = "";
     }
 
     return () => {
       document.body.style.overflow = "";
-      document.documentElement.style.overflow = "";
+      document.body.style.paddingRight = "";
     };
   }, [
     selectedProfileModal,
@@ -317,6 +330,7 @@ export default function App() {
     showSupportDialog,
     showMaintenancePopup,
     announcementToDismiss,
+    visibleCampaigns.length,
     userProfile,
     currentUser,
   ]);
@@ -394,7 +408,7 @@ export default function App() {
               experienceYears: profile.experienceYears || 0,
               isFresher: profile.isFresher || false,
               companyName: profile.companyName || "",
-              role: profile.role || "",
+              role: profile.jobRole || "",
               workExperiences: profile.workExperiences || [],
               skills: profile.skills?.join(", ") || "",
               competitionCount: profile.competitionCount || 0,
@@ -420,6 +434,7 @@ export default function App() {
       } else {
         setUserProfile(null);
         setCurrentUser(null);
+        setUserCampaigns([]);
         setCurrentView("home");
         document.documentElement.classList.remove("dark");
         setIsLoading(false);
@@ -485,7 +500,14 @@ export default function App() {
     let unsubscribeUnread: (() => void) | undefined;
     let unsubscribeReceived: (() => void) | undefined;
     let unsubscribeSent: (() => void) | undefined;
+    let unsubscribeCampaigns: (() => void) | undefined;
+
     if (currentUser) {
+      setMessageRequests([]);
+      setTotalUnreadMessages(0);
+      setUserCampaigns([]);
+      setReceivedMessages([]);
+      setSentMessages([]);
       unsubscribeReqs = listenToMessageRequests(currentUser.uid, (requests) => {
         setMessageRequests(requests);
       });
@@ -495,6 +517,7 @@ export default function App() {
           setTotalUnreadMessages(count);
         },
       );
+      unsubscribeCampaigns = listenToTargetedCampaigns(currentUser.uid, setUserCampaigns);
       unsubscribeReceived = listenToAllReceivedMessages(
         currentUser.uid,
         (msgs) => {
@@ -510,6 +533,7 @@ export default function App() {
       unsubscribeUnread?.();
       unsubscribeReceived?.();
       unsubscribeSent?.();
+      unsubscribeCampaigns?.();
     };
   }, [currentUser]);
 
@@ -632,7 +656,7 @@ export default function App() {
         !profileForm.isFresher && calculatedExperienceYears > 0
           ? validWorkExperiences[0]?.company
           : undefined,
-      role:
+      jobRole:
         !profileForm.isFresher && calculatedExperienceYears > 0
           ? validWorkExperiences[0]?.role
           : undefined,
@@ -765,7 +789,7 @@ export default function App() {
             tm.ugDegree,
             tm.collegeName,
             tm.companyName,
-            tm.role,
+            tm.jobRole,
           ].some((field) =>
             field?.toLowerCase().includes(filterExperience.toLowerCase()),
           )
@@ -844,6 +868,9 @@ export default function App() {
       await logout();
       setCurrentUser(null);
       setUserProfile(null);
+      setUserCampaigns([]);
+      setCampaignToDismiss(null);
+      setAnnouncementToDismiss(null);
       setCurrentView("home");
       setIsSigningOut(false);
     }, 1920);
@@ -878,7 +905,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#09090b] text-slate-900 dark:text-slate-100 font-sans relative overflow-x-hidden transition-colors">
+    <div className="min-h-screen bg-white dark:bg-[#09090b] text-slate-900 dark:text-slate-100 font-sans relative transition-colors">
       {/* Mesh Gradient Background Elements */}
       <div className="fixed top-[-10%] left-[-10%] w-[50%] h-[50%] bg-red-600/20 dark:bg-red-900/20 rounded-full blur-[120px] pointer-events-none z-0 transition-colors"></div>
       <div className="fixed bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-red-400/20 dark:bg-red-800/10 rounded-full blur-[120px] pointer-events-none z-0 transition-colors"></div>
@@ -922,7 +949,7 @@ export default function App() {
       />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-32 md:pb-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-32 md:pb-8 flex-1 overflow-y-auto">
         <AnimatePresence mode="wait">
           {currentView === "home" && (
             <motion.div
@@ -1590,10 +1617,10 @@ export default function App() {
                                       );
                                     return parts.join(" ");
                                   })()}
-                                  {tm.role && tm.companyName && (
+                                  {tm.jobRole && tm.companyName && (
                                     <span className="opacity-75 md:inline hidden truncate">
                                       {" "}
-                                      - {tm.role} @ {tm.companyName}
+                                      - {tm.jobRole} @ {tm.companyName}
                                     </span>
                                   )}
                                 </div>
@@ -2057,7 +2084,7 @@ export default function App() {
                             Full Name <span className="text-red-500">*</span>
                           </label>
                           <input
-                            value={profileForm.displayName}
+                            value={profileForm.displayName || ""}
                             onChange={(e) =>
                               setProfileForm({
                                 ...profileForm,
@@ -2073,7 +2100,7 @@ export default function App() {
                             Gender
                           </label>
                           <select
-                            value={profileForm.gender}
+                            value={profileForm.gender || ""}
                             onChange={(e) =>
                               setProfileForm({
                                 ...profileForm,
@@ -2098,7 +2125,7 @@ export default function App() {
                           <span className="text-red-500">*</span>
                         </label>
                         <select
-                          value={profileForm.degree}
+                          value={profileForm.degree || ""}
                           onChange={(e) =>
                             setProfileForm({
                               ...profileForm,
@@ -2121,7 +2148,7 @@ export default function App() {
                             <span className="text-red-500">*</span>
                           </label>
                           <input
-                            value={profileForm.collegeName}
+                            value={profileForm.collegeName || ""}
                             onChange={(e) =>
                               setProfileForm({
                                 ...profileForm,
@@ -2137,7 +2164,7 @@ export default function App() {
                             UG Degree <span className="text-red-500">*</span>
                           </label>
                           <input
-                            value={profileForm.ugDegree}
+                            value={profileForm.ugDegree || ""}
                             onChange={(e) =>
                               setProfileForm({
                                 ...profileForm,
@@ -2154,7 +2181,7 @@ export default function App() {
                         <input
                           type="checkbox"
                           id="isFresher"
-                          checked={profileForm.isFresher}
+                          checked={profileForm.isFresher || false}
                           onChange={(e) =>
                             setProfileForm({
                               ...profileForm,
@@ -2252,7 +2279,7 @@ export default function App() {
                                     <div className="absolute -left-[17px] top-4 w-3.5 h-3.5 rounded-full bg-white dark:bg-[#09090b] border-2 border-red-400 z-10 transition-transform group-hover:scale-125"></div>
                                     <input
                                       placeholder="Company"
-                                      value={exp.company}
+                                      value={exp.company || ""}
                                       onChange={(e) =>
                                         setProfileForm({
                                           ...profileForm,
@@ -2272,7 +2299,7 @@ export default function App() {
                                     />
                                     <input
                                       placeholder="Role"
-                                      value={exp.role}
+                                      value={exp.role || ""}
                                       onChange={(e) =>
                                         setProfileForm({
                                           ...profileForm,
@@ -2385,7 +2412,7 @@ export default function App() {
                           <span className="text-red-500">*</span>
                         </label>
                         <input
-                          value={profileForm.skills}
+                          value={profileForm.skills || ""}
                           onChange={(e) =>
                             setProfileForm({
                               ...profileForm,
@@ -2402,7 +2429,7 @@ export default function App() {
                           <span className="text-red-500">*</span>
                         </label>
                         <select
-                          value={profileForm.competitionCount}
+                          value={profileForm.competitionCount || 0}
                           onChange={(e) =>
                             setProfileForm({
                               ...profileForm,
@@ -2424,7 +2451,7 @@ export default function App() {
                           Bio <span className="text-red-500">*</span>
                         </label>
                         <textarea
-                          value={profileForm.bio}
+                          value={profileForm.bio || ""}
                           onChange={(e) =>
                             setProfileForm({
                               ...profileForm,
@@ -2570,7 +2597,7 @@ export default function App() {
                             Role @ Company
                           </h3>
                           <p className="text-slate-900 dark:text-slate-50">
-                            {userProfile?.role} @ {userProfile?.companyName}
+                            {userProfile?.jobRole} @ {userProfile?.companyName}
                           </p>
                         </div>
                       ) : null}
@@ -2703,7 +2730,7 @@ export default function App() {
                               darkMode: newMode,
                             };
                             setUserProfile(updated);
-                            await saveUserProfile(updated);
+                            await saveUserProfile({ uid: userProfile.uid, darkMode: newMode });
                           }
                         }}
                         className={`shrink-0 w-11 h-6 rounded-full transition-colors relative duration-200 ease-in-out flex items-center px-0.5 ${userProfile?.darkMode ? "bg-red-600" : "bg-slate-300 dark:bg-slate-700"}`}
@@ -2734,7 +2761,7 @@ export default function App() {
                                 isPaused: false,
                               };
                               setUserProfile(updated);
-                              await saveUserProfile(updated);
+                              await saveUserProfile({ uid: userProfile.uid, isPaused: false });
                             }
                           }
                         }}
@@ -3365,9 +3392,9 @@ export default function App() {
                           return parts.join(" ");
                         })()}{" "}
                         Exp
-                        {selectedProfileModal.role &&
+                        {selectedProfileModal.jobRole &&
                         selectedProfileModal.companyName
-                          ? ` (${selectedProfileModal.role} @ ${selectedProfileModal.companyName})`
+                          ? ` (${selectedProfileModal.jobRole} @ ${selectedProfileModal.companyName})`
                           : ""}
                       </div>
                     ) : (
@@ -3765,7 +3792,7 @@ export default function App() {
                         if (currentUser) {
                           if (userProfile) {
                             await saveUserProfile({
-                              ...userProfile,
+                              uid: userProfile.uid,
                               isDeleted: true,
                             });
                           }
@@ -3857,7 +3884,7 @@ export default function App() {
                       if (currentUser && userProfile) {
                         const updated = { ...userProfile, isPaused: true };
                         setUserProfile(updated);
-                        await saveUserProfile(updated);
+                        await saveUserProfile({ uid: userProfile.uid, isPaused: true });
                       }
                     }}
                     className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-xl transition"
@@ -4158,15 +4185,16 @@ export default function App() {
                 <button
                   onClick={async () => {
                     if (currentUser && userProfile) {
+                      const newAnnouncements = [
+                        ...(userProfile.dismissedAnnouncements || []),
+                        announcementToDismiss,
+                      ];
                       const updatedProfile = {
                         ...userProfile,
-                        dismissedAnnouncements: [
-                          ...(userProfile.dismissedAnnouncements || []),
-                          announcementToDismiss,
-                        ],
+                        dismissedAnnouncements: newAnnouncements,
                       };
                       setUserProfile(updatedProfile);
-                      await saveUserProfile(updatedProfile);
+                      await saveUserProfile({ uid: userProfile.uid, dismissedAnnouncements: newAnnouncements });
                     }
                     setAnnouncementToDismiss(null);
                   }}
@@ -4273,6 +4301,74 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Targeted Campaign Popup */}
+      {visibleCampaigns.length > 0 && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <AnimatePresence mode="wait">
+            {visibleCampaigns.slice(0, 1).map((campaign) => {
+              const millis = typeof campaign.createdAt?.toMillis === "function" ? campaign.createdAt.toMillis() : new Date(campaign.createdAt).getTime();
+              const days = millis ? Math.floor((new Date().getTime() - millis) / (1000 * 60 * 60 * 24)) : 0;
+              const dateStr = millis ? new Date(millis).toLocaleDateString('en-GB') : '';
+              const timestampStr = millis ? `Sent on ${days} days ago (${dateStr})` : '';
+              const formattedMessage = (campaign.message || "").replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #0d9488; text-decoration: underline;">$1</a>');
+
+              return (
+                <motion.div
+                  key={campaign.id}
+                  initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -20 }}
+                  className="bg-white dark:bg-[#18181b] p-6 sm:p-8 rounded-3xl max-w-lg w-full shadow-2xl relative overflow-hidden flex flex-col items-center text-center"
+                >
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-teal-400 to-blue-500"></div>
+
+                  <div className="w-16 h-16 bg-teal-50 dark:bg-teal-900/40 text-teal-600 dark:text-teal-400 rounded-full flex items-center justify-center mb-6 shadow-sm border border-teal-100 dark:border-teal-800/50">
+                    <Send className="w-8 h-8 ml-1" />
+                  </div>
+
+                  <h2 className="text-2xl font-black text-slate-900 dark:text-white mb-2 leading-tight">
+                    {campaign.title}
+                  </h2>
+
+                  <div 
+                    className="text-slate-600 dark:text-slate-400 mb-2 max-w-sm whitespace-pre-wrap relaxed-leading text-sm"
+                    dangerouslySetInnerHTML={{ __html: formattedMessage }}
+                  />
+
+                  {timestampStr && (
+                    <div className="text-xs text-slate-400 dark:text-slate-500 font-medium mb-8">
+                      {timestampStr}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row gap-3 w-full">
+                    <button
+                      onClick={async () => {
+                        const id = campaign.id;
+                        if (id && currentUser && userProfile) {
+                          const newCampaigns = [...(userProfile.dismissedCampaigns || []), id];
+                          const updatedProfile = {
+                             ...userProfile,
+                             dismissedCampaigns: newCampaigns
+                          };
+                          setUserProfile(updatedProfile);
+                          await saveUserProfile({ uid: userProfile.uid, dismissedCampaigns: newCampaigns });
+                          // Read count increment
+                          await import('./services/firebaseService').then((m) => m.incrementCampaignReadCount?.(id));
+                        }
+                      }}
+                      className="w-full py-3.5 px-6 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 font-bold rounded-xl transition shadow-lg flex-1"
+                    >
+                      Got it, Thanks!
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Maintenance Popup */}
       <AnimatePresence>

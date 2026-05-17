@@ -68,7 +68,10 @@ export const signInWithGoogle = async () => {
   try {
     const result = await signInWithPopup(auth, provider);
     return result.user;
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'auth/popup-closed-by-user') {
+      return null;
+    }
     console.error("Auth Error:", error);
     throw error;
   }
@@ -563,6 +566,15 @@ export const listenToAnnouncements = (callback: (announcements: import('../types
   }, (error) => handleFirestoreError(error, OperationType.LIST, path));
 };
 
+export const listenToTargetedCampaigns = (userId: string, callback: (campaigns: import('../types.ts').Campaign[]) => void) => {
+  const path = 'campaigns';
+  const q = query(collection(db, path), where('status', '==', 'active'), where('targetUserIds', 'array-contains', userId));
+  
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as import('../types.ts').Campaign)));
+  }, (error) => handleFirestoreError(error, OperationType.LIST, path));
+};
+
 export const getGlobalSettings = async (): Promise<import('../types.ts').GlobalSettings | null> => {
   const path = 'settings/global';
   try {
@@ -638,3 +650,87 @@ export const updateUserRole = async (userId: string, role: string) => {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
 };
+
+// --- Audit Logs ---
+export const logAuditAction = async (auditLog: Partial<import('../types.ts').AuditLog>) => {
+  try {
+    const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
+    const docRef = await addDoc(collection(db, 'auditLogs'), {
+      ...auditLog,
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'auditLogs');
+  }
+};
+
+export const getAuditLogs = async (): Promise<import('../types.ts').AuditLog[]> => {
+  try {
+    const { getDocs, collection, query, orderBy, limit } = await import('firebase/firestore');
+    const q = query(collection(db, 'auditLogs'), orderBy('createdAt', 'desc'), limit(100));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as import('../types.ts').AuditLog));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'auditLogs');
+    return [];
+  }
+};
+
+// --- Campaigns ---
+export const createCampaign = async (campaign: Partial<import('../types.ts').Campaign>) => {
+  try {
+    const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
+    const docRef = await addDoc(collection(db, 'campaigns'), {
+      ...campaign,
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, 'campaigns');
+  }
+};
+
+export const getCampaigns = async (): Promise<import('../types.ts').Campaign[]> => {
+  try {
+    const { getDocs, collection, query, orderBy } = await import('firebase/firestore');
+    const q = query(collection(db, 'campaigns'), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as import('../types.ts').Campaign));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'campaigns');
+    return [];
+  }
+};
+
+export const updateCampaignStatus = async (campaignId: string, status: 'active' | 'completed' | 'draft' | 'paused') => {
+  try {
+    const { updateDoc, doc } = await import('firebase/firestore');
+    const campaignRef = doc(db, 'campaigns', campaignId);
+    await updateDoc(campaignRef, { status });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `campaigns/${campaignId}`);
+  }
+};
+
+export const deleteCampaign = async (campaignId: string) => {
+  try {
+    const { deleteDoc, doc } = await import('firebase/firestore');
+    const campaignRef = doc(db, 'campaigns', campaignId);
+    await deleteDoc(campaignRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `campaigns/${campaignId}`);
+  }
+};
+
+export const incrementCampaignReadCount = async (campaignId: string) => {
+  try {
+    const { updateDoc, doc, increment } = await import('firebase/firestore');
+    await updateDoc(doc(db, 'campaigns', campaignId), {
+      readCount: increment(1)
+    });
+  } catch(error) {
+    handleFirestoreError(error, OperationType.UPDATE, `campaigns/${campaignId}`);
+  }
+};
+

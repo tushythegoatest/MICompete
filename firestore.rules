@@ -55,12 +55,14 @@ service cloud.firestore {
         && data.experienceYears is number && data.experienceYears >= 0
         && (!('isFresher' in data) || (data.isFresher is bool))
         && (!('companyName' in data) || (data.companyName is string && data.companyName.size() <= 1000))
+        && (!('jobRole' in data) || (data.jobRole is string && data.jobRole.size() <= 1000))
         && (!('role' in data) || (data.role is string && data.role.size() <= 1000))
         && (!('workExperiences' in data) || (data.workExperiences is list && data.workExperiences.size() <= 5))
         && (!('isPaused' in data) || (data.isPaused is bool))
         && (!('isDeleted' in data) || (data.isDeleted is bool))
         && (!('isBlocked' in data) || (data.isBlocked is bool))
         && (!('dismissedAnnouncements' in data) || (data.dismissedAnnouncements is list))
+        && (!('dismissedCampaigns' in data) || (data.dismissedCampaigns is list))
         && (!('lastActiveAt' in data) || (data.lastActiveAt is timestamp))
         && data.competitionCount is number && data.competitionCount >= 0
         && data.skills is list && data.skills.size() <= 50
@@ -96,9 +98,9 @@ service cloud.firestore {
         && incoming().uid == existing().uid
         && incoming().email == existing().email
         && (
-          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'isDeleted', 'isPaused', 'isBlocked', 'displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'isFresher', 'companyName', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'lastActiveAt', 'dismissedAnnouncements'])) ||
-          (isModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['isPaused', 'isBlocked', 'displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'isFresher', 'companyName', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'lastActiveAt', 'dismissedAnnouncements'])) ||
-          (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'isFresher', 'companyName', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'isPaused', 'isDeleted', 'lastActiveAt', 'dismissedAnnouncements']))
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'jobRole', 'isDeleted', 'isPaused', 'isBlocked', 'displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'isFresher', 'companyName', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'lastActiveAt', 'dismissedAnnouncements', 'dismissedCampaigns'])) ||
+          (isModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['jobRole', 'isPaused', 'isBlocked', 'displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'isFresher', 'companyName', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'lastActiveAt', 'dismissedAnnouncements', 'dismissedCampaigns'])) ||
+          (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['jobRole', 'displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'isFresher', 'companyName', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'isPaused', 'isDeleted', 'lastActiveAt', 'dismissedAnnouncements', 'dismissedCampaigns']))
         );
     }
 
@@ -207,6 +209,23 @@ service cloud.firestore {
       allow create: if isSignedIn() && isValidId(ticketId) && incoming().userId == request.auth.uid;
       allow update: if isModerator() && isValidId(ticketId);
       allow delete: if isModerator() && isValidId(ticketId);
+    }
+
+    // Collection: Audit Logs
+    match /auditLogs/{logId} {
+      allow read: if isModerator();
+      allow list: if isModerator();
+      allow create: if isModerator() && isValidId(logId) && incoming().adminId == request.auth.uid;
+    }
+
+    // Collection: Campaigns
+    match /campaigns/{campaignId} {
+      allow read: if isModerator() || (isSignedIn() && request.auth.uid in resource.data.targetUserIds);
+      allow list: if isModerator() || (isSignedIn() && request.auth.uid in resource.data.targetUserIds);
+      allow create: if isModerator() && isValidId(campaignId) && incoming().creatorId == request.auth.uid;
+      allow update: if (isModerator() && isValidId(campaignId)) || 
+        (isSignedIn() && isValidId(campaignId) && request.auth.uid in existing().targetUserIds && incoming().diff(existing()).affectedKeys().hasOnly(['readCount']) && incoming().readCount is number);
+      allow delete: if isAdmin() && isValidId(campaignId);
     }
   }
 }
