@@ -597,7 +597,7 @@ export default function App() {
       !!currentUser && (currentView === "teammates" || currentView === "chat"),
   });
 
-  const allTeammates =
+  const allTeammates: UserProfile[] =
     teammatesQuery.data?.pages.flatMap((page: any) => page.users) || [];
   const hasMoreTeammates = teammatesQuery.hasNextPage;
 
@@ -618,7 +618,8 @@ export default function App() {
   useEffect(() => {
     const missingUids = activeChatUserIds.filter(
       (uid) =>
-        !connectionProfiles[uid] && !allTeammates.some((t) => t.uid === uid),
+        !connectionProfiles[uid] &&
+        !allTeammates.some((t: UserProfile) => t.uid === uid),
     );
 
     if (missingUids.length > 0 && currentUser) {
@@ -642,8 +643,10 @@ export default function App() {
 
   const sidebarTeammates = React.useMemo(() => {
     const teammateMap = new Map<string, UserProfile>();
-    allTeammates.forEach((t) => teammateMap.set(t.uid, t));
-    Object.values(connectionProfiles).forEach((p) => teammateMap.set(p.uid, p));
+    allTeammates.forEach((t: UserProfile) => teammateMap.set(t.uid, t));
+    Object.values(connectionProfiles).forEach((p: UserProfile) =>
+      teammateMap.set(p.uid, p),
+    );
     return Array.from(teammateMap.values());
   }, [allTeammates, connectionProfiles]);
 

@@ -16,8 +16,14 @@ async function startServer() {
       const { bio, skills, degree } = req.body;
       const { GoogleGenAI } = await import("@google/genai");
       
-      const genAI = new GoogleGenAI(process.env.GEMINI_API_KEY || "");
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY || "",
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
 
       const prompt = `You are a professional career coach. Enhance the following bio for a B-school student competition platform.
       Original Bio: ${bio}
@@ -30,8 +36,11 @@ async function startServer() {
       - Highlight the synergy between their skills and degree.
       - Output ONLY the enhanced bio text.`;
 
-      const result = await model.generateContent(prompt);
-      const enhancedBio = result.response.text().trim();
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+      });
+      const enhancedBio = response.text?.trim() || "";
       
       res.json({ enhancedBio });
     } catch (error) {
