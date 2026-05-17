@@ -127,6 +127,34 @@ export const formatMessageTime = (date: any) => {
   return hours + ":" + minutesStr + " " + ampm;
 };
 
+export const ClickableText = ({ text, className }: { text: string; className?: string }) => {
+  if (!text) return null;
+  // Regex to match URLs starting with http or https
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+
+  return (
+    <span className={className}>
+      {parts.map((part, index) => {
+        if (part.match(urlRegex)) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-bold hover:opacity-80 transition-opacity break-all inline"
+            >
+              {part}
+            </a>
+          );
+        }
+        return part;
+      })}
+    </span>
+  );
+};
+
 export default function App() {
   const [currentView, setCurrentViewState] = useState<View>("home");
   const location = useLocation();
@@ -985,12 +1013,12 @@ export default function App() {
             key={announcement.id}
             className="bg-red-600 text-white px-4 py-3 sm:px-6 lg:px-8 shadow-md flex items-center justify-center relative"
           >
-            <p className="text-sm font-medium text-center pr-8">
+            <div className="text-sm font-medium text-center pr-8">
               <span className="font-bold uppercase tracking-wider mr-2">
                 Announcement:
               </span>
-              {announcement.message}
-            </p>
+              <ClickableText text={announcement.message} />
+            </div>
             {currentUser && announcement.id && (
               <button
                 onClick={() =>
@@ -4384,7 +4412,6 @@ export default function App() {
               const days = millis ? Math.floor((new Date().getTime() - millis) / (1000 * 60 * 60 * 24)) : 0;
               const dateStr = millis ? new Date(millis).toLocaleDateString('en-GB') : '';
               const timestampStr = millis ? `Sent on ${days} days ago (${dateStr})` : '';
-              const formattedMessage = (campaign.message || "").replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #0d9488; text-decoration: underline;">$1</a>');
 
               return (
                 <motion.div
@@ -4404,9 +4431,9 @@ export default function App() {
                     {campaign.title}
                   </h2>
 
-                  <div 
-                    className="text-slate-600 dark:text-slate-400 mb-2 max-w-sm whitespace-pre-wrap relaxed-leading text-sm"
-                    dangerouslySetInnerHTML={{ __html: formattedMessage }}
+                  <ClickableText 
+                    className="text-slate-600 dark:text-slate-400 mb-2 max-w-sm whitespace-pre-wrap relaxed-leading text-sm block"
+                    text={campaign.message}
                   />
 
                   {timestampStr && (

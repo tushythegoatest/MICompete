@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { UserProfile, Message, Report } from '../types';
+import { ClickableText } from '../App';
 import { MessageRequest, getAllReports, updateReportStatus, deleteReport, saveGlobalSettings, createAnnouncement, updateUserRole, getAllAnnouncements, updateAnnouncement, deleteAnnouncement } from '../services/firebaseService';
 import { collection, getDocs, collectionGroup, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -1048,8 +1049,8 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                        </div>
                        <p className="text-sm text-slate-500 mb-2 shrink-0">Targeted: <span className="font-medium text-slate-700 dark:text-slate-300">{camp.targetUserIds?.length || 0} Users</span></p>
                        <div 
-                         className="text-sm bg-slate-50 dark:bg-[#27272a] p-3 rounded-lg border border-slate-200 dark:border-slate-800 mb-4 whitespace-pre-wrap break-all sm:break-words line-clamp-3 w-full"
-                         dangerouslySetInnerHTML={{ __html: (camp.message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-teal-600 hover:underline">$1</a>') }}
+                         className="text-sm bg-slate-50 dark:bg-[#27272a] p-3 rounded-lg border border-slate-200 dark:border-slate-800 mb-4 whitespace-pre-wrap break-all sm:break-words line-clamp-3 w-full block"
+                          text={camp.message}
                        />
                        <div className="flex justify-between items-center text-xs text-slate-400 w-full mt-auto">
                           <span className="truncate flex-1 mr-2">{dateStr} - By {camp.creatorName || camp.createdBy || ''}</span>
@@ -1212,10 +1213,10 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                         <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">Campaign Title</h4>
                         <p className="text-2xl font-bold text-slate-900 dark:text-white">{selectedCampaignDetails.title}</p>
                       </div>
-                      <div className="bg-slate-50 dark:bg-[#27272a] p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-2">Message Body</h4>
-                        <p className="text-slate-900 dark:text-slate-100 whitespace-pre-wrap">{selectedCampaignDetails.message}</p>
-                      </div>
+                        <div className="bg-slate-50 dark:bg-[#27272a] p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                          <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-2">Message Body</h4>
+                          <ClickableText className="text-slate-900 dark:text-slate-100 whitespace-pre-wrap block" text={selectedCampaignDetails.message} />
+                        </div>
                    </div>
                    
                    <div className="grid grid-cols-2 gap-4">
@@ -1980,7 +1981,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                         </div>
                       ) : (
                         <>
-                          <p className="font-medium text-slate-900 dark:text-slate-50 pr-20">{ann.message}</p>
+                          <ClickableText className="font-medium text-slate-900 dark:text-slate-50 pr-20 block" text={ann.message} />
                           <p className="text-xs text-slate-500 mt-1">Started on {new Date(ann.createdAt?.toDate?.() || Date.now()).toLocaleDateString()}</p>
                           <div className="absolute top-4 right-4 flex gap-2">
                             <button 
@@ -2059,7 +2060,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
 
                       return (
                       <div key={ann.id} className="p-4 bg-slate-50 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 rounded-xl opacity-70 group relative">
-                        <p className="text-sm text-slate-700 dark:text-slate-300 pr-8">{ann.message}</p>
+                        <ClickableText className="text-sm text-slate-700 dark:text-slate-300 pr-8 block" text={ann.message} />
                         <p className="text-xs text-slate-400 mt-2">Sent {dA} {dA === 1 ? 'day' : 'days'} ago ({dS})</p>
                       <button 
                         disabled={actingOnAnnouncementId === ann.id}
