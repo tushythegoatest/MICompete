@@ -65,6 +65,20 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
   const isModerator = currentUserProfile?.role === 'moderator' || isAdmin;
 
   useEffect(() => {
+    if (selectedUser || confirmAction || announcementToPermanentlyDelete || showMaintenanceConfirm) {
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+    }
+    return () => { 
+      document.body.style.overflow = ''; 
+      document.documentElement.style.overflow = ''; 
+    };
+  }, [selectedUser, confirmAction, announcementToPermanentlyDelete, showMaintenanceConfirm]);
+
+  useEffect(() => {
     if (!isModerator) return;
 
     const fetchAdminData = async () => {
@@ -692,7 +706,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
       {/* User Details Modal */}
       <AnimatePresence>
       {selectedUser && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 pb-24 md:pb-4">
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -704,7 +718,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-2xl bg-white dark:bg-[#09090b] shadow-2xl rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]"
+            className="relative w-full max-w-2xl bg-white dark:bg-[#09090b] shadow-2xl rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[80vh] md:max-h-[90vh]"
           >
             <div className="absolute top-6 right-6 flex items-center gap-2 z-10">
               <button 
