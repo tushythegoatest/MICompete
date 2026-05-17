@@ -9,7 +9,8 @@ export const Navbar = ({
   setCurrentView, 
   currentUser, 
   userProfile,
-  hasUnreadMessages 
+  hasUnreadMessages,
+  hasConnectionRequests 
 }: any) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
@@ -20,7 +21,7 @@ export const Navbar = ({
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => {
       setHoveredItemId(id);
-    }, 600);
+    }, 300);
   };
 
   const handleMouseLeave = () => {
@@ -59,7 +60,7 @@ export const Navbar = ({
   const navItems = [
     ...(currentUser ? [
       { id: 'competitions', label: 'Compete', icon: Trophy, description: 'Check out active challenges.' },
-      { id: 'teammates', label: 'Connect', icon: Network, description: 'Find your next teammate.' },
+      { id: 'teammates', label: 'Connect', icon: Network, hasNotification: hasConnectionRequests, description: 'Find your next teammate.' },
       { id: 'chat', label: 'Message', icon: MessageSquare, hasNotification: hasUnreadMessages, description: 'Chat with your connections.' },
       { id: 'profile', label: 'Profile', icon: User, description: 'Update your profile or settings.' },
       ...(isAdmin ? [{ id: 'admin', label: 'Admin', icon: Shield, hasNotification: hasAdminNotification, description: 'Manage MICompete.' }] : [])
@@ -67,11 +68,11 @@ export const Navbar = ({
   ];
 
   return (
-    <nav className="sticky top-0 z-50 bg-white dark:bg-[#09090b]/80 dark:bg-[#09090b]/80 backdrop-blur-md border-b border-slate-200 dark:border-[#27272a] transition-colors">
+    <nav className="sticky top-0 z-50 bg-white dark:bg-[#09090b]/80 backdrop-blur-md border-b border-slate-200 dark:border-[#27272a] transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 items-center">
+        <div className="flex justify-between h-20 items-center">
           <button 
-            className="relative flex items-center gap-3 cursor-pointer transition-transform hover:scale-105 mr-4 lg:mr-8 group" 
+            className="relative flex items-center gap-3 cursor-pointer transition-transform hover:scale-105 mr-4 lg:mr-8 group h-full border-b-2 border-transparent pt-[2px]" 
             onClick={() => setCurrentView('home')}
             onMouseEnter={() => handleMouseEnter('logo')}
             onMouseLeave={handleMouseLeave}
@@ -80,7 +81,7 @@ export const Navbar = ({
               <img src="/dark-logo.png" alt="MICompete" className="hidden dark:block h-full w-auto object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]" />
               <img src="/light-logo.png" alt="MICompete" className="block dark:hidden h-full w-auto object-contain drop-shadow-[0_0_8px_rgba(0,0,0,0.15)]" />
             </div>
-            <span className="font-bold text-xl tracking-tight text-slate-900 dark:text-slate-50 drop-shadow-sm">MICompete</span>
+            <span className="font-bold text-xl tracking-tight text-slate-900 dark:text-slate-50 drop-shadow-sm group-hover:text-red-600 transition-colors">MICompete</span>
             
             {/* Tooltip for Logo */}
             <AnimatePresence>
@@ -99,15 +100,15 @@ export const Navbar = ({
           </button>
 
           {/* Desktop Nav */}
-          <div className="hidden md:flex items-center space-x-6 lg:space-x-12">
+          <div className="hidden md:flex items-center space-x-6 lg:space-x-12 h-full">
             {navItems.map((item) => (
-              <div key={item.id} className="relative group">
+              <div key={item.id} className="relative group h-full">
                 <button
                   onClick={() => setCurrentView(item.id as View)}
                   onMouseEnter={() => handleMouseEnter(item.id)}
                   onMouseLeave={handleMouseLeave}
-                  className={`relative flex items-center gap-2 lg:gap-3 text-sm lg:text-base font-semibold transition-colors ${
-                    currentView === item.id ? 'text-red-600 border-b-2 border-red-600 pb-1 mt-1' : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50 pb-1 mt-1'
+                  className={`relative flex items-center gap-2 lg:gap-3 text-sm lg:text-base font-semibold transition-colors h-full border-b-2 pt-[2px] ${
+                    currentView === item.id ? 'text-red-600 border-red-600' : 'text-slate-700 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-500 border-transparent'
                   }`}
                 >
                   <div className="relative flex items-center justify-center">

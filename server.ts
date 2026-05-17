@@ -11,6 +11,9 @@ async function startServer() {
 
   app.use(express.json());
 
+  // API routes go here FIRST
+  // (Assuming there might be some in the future, currently none but standardizing)
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -19,6 +22,9 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
+    // In production, server.cjs is inside dist/
+    // Static files are also in dist/
+    // So if we run from project root, path.join(process.cwd(), 'dist') is correct.
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -26,17 +32,9 @@ async function startServer() {
     });
   }
 
-  if (process.env.VERCEL !== '1') {
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  }
-
-  return app;
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 }
 
-const appPromise = startServer();
-export default async function (req: any, res: any) {
-  const app = await appPromise;
-  app(req, res);
-}
+startServer();

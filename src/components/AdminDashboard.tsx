@@ -3,7 +3,7 @@ import { UserProfile, Message, Report } from '../types';
 import { MessageRequest, getAllReports, updateReportStatus, deleteReport, saveGlobalSettings, createAnnouncement, updateUserRole, getAllAnnouncements, updateAnnouncement, deleteAnnouncement } from '../services/firebaseService';
 import { collection, getDocs, collectionGroup, query, orderBy, limit, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Users, MessageSquare, Activity, Loader2, X, AlertOctagon, PauseCircle, Trash2, Flag, BarChart2, Download, Settings, Send, Bell, CheckCircle, Pencil } from 'lucide-react';
+import { Users, MessageSquare, Activity, Loader2, X, AlertOctagon, PauseCircle, Trash2, Flag, BarChart2, Download, Settings, Send, Bell, CheckCircle, Pencil, Filter, ShieldCheck, Shield, User as UserIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
@@ -16,6 +16,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'deleted' | 'blocked' | 'paused'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'moderator' | 'user'>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'messages' | 'reports' | 'tickets' | 'settings' | 'notifications'>('overview');
   
   const [messageFilterKeyword, setMessageFilterKeyword] = useState('');
@@ -44,7 +45,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
 
   const handleTabChange = (tabId: any) => {
     setActiveTab(tabId);
-    if (window.innerWidth < 768) {
+    if (window.innerWidth < 1024) {
       setTimeout(() => {
         contentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
@@ -141,9 +142,10 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
     fetchAdminData();
   }, [isModerator]);
 
-  const handleUpdateUserStatus = async (uid: string, field: string, value: boolean) => {
+  const handleUpdateUserStatus = async (uid: string, field: string, value: any) => {
     try {
-      await updateDoc(doc(db, 'users', uid), { [field]: value });
+      const { setDoc, doc } = await import('firebase/firestore');
+      await setDoc(doc(db, 'users', uid), { [field]: value }, { merge: true });
       setUsers(users.map(u => u.uid === uid ? { ...u, [field]: value } : u));
       if (selectedUser?.uid === uid) {
         setSelectedUser({ ...selectedUser, [field]: value });
@@ -381,25 +383,55 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                </div>
             </div>
           </div>
-          <div className="mb-6 flex flex-col sm:flex-row gap-4">
-             <input 
-                type="text" 
-                placeholder="Search by name or email..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 min-w-0 bg-slate-50 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3 focus:ring-2 focus:ring-red-600 text-slate-900 dark:text-slate-50 placeholder-slate-500 transition-all outline-none"
-             />
-             <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
-                className="w-full sm:w-48 bg-slate-50 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3 focus:ring-2 focus:ring-red-600 text-slate-900 dark:text-slate-50 transition-all outline-none"
-             >
-               <option value="all">All Statuses</option>
-               <option value="active">Active</option>
-               <option value="deleted">Deleted</option>
-               <option value="blocked">Blocked</option>
-               <option value="paused">Paused</option>
-             </select>
+          <div className="mb-6 flex flex-col md:flex-row gap-4 items-end">
+             <div className="flex-1 w-full">
+                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block ml-1">Search Users</label>
+                <input 
+                   type="text" 
+                   placeholder="Search by name or email..." 
+                   value={searchTerm}
+                   onChange={(e) => setSearchTerm(e.target.value)}
+                   className="w-full bg-slate-50 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3 focus:ring-2 focus:ring-red-600 text-slate-900 dark:text-slate-50 placeholder-slate-500 transition-all outline-none"
+                />
+             </div>
+             <div className="w-full md:w-auto flex-1">
+                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block ml-1">Quick Role Filter</label>
+                <div className="flex gap-2 flex-wrap">
+                  {[
+                    { id: 'all', label: 'All', icon: Users },
+                    { id: 'admin', label: 'Admins', icon: ShieldCheck, color: 'text-red-600 bg-red-50 dark:bg-red-900/20' },
+                    { id: 'moderator', label: 'Mods', icon: Shield, color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' },
+                    { id: 'user', label: 'Users', icon: UserIcon, color: 'text-slate-600 bg-slate-50 dark:bg-slate-900/20' }
+                  ].map((role) => (
+                    <button
+                      key={role.id}
+                      onClick={() => setRoleFilter(role.id as any)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all border shadow-sm ${
+                        roleFilter === role.id 
+                          ? (role.color || 'bg-red-600 text-white border-red-600 shadow-red-200/50')
+                          : 'bg-white dark:bg-[#18181b] text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-red-600'
+                      }`}
+                    >
+                      <role.icon className="w-4 h-4" />
+                      {role.label}
+                    </button>
+                  ))}
+                </div>
+             </div>
+             <div className="w-full md:w-48">
+                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block ml-1">Account Status</label>
+                <select
+                   value={statusFilter}
+                   onChange={(e) => setStatusFilter(e.target.value as any)}
+                   className="w-full bg-slate-50 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3 focus:ring-2 focus:ring-red-600 text-slate-900 dark:text-slate-50 transition-all outline-none cursor-pointer font-medium"
+                >
+                  <option value="all">Active Only</option>
+                  <option value="active">Active Residents</option>
+                  <option value="deleted">Soft Deleted</option>
+                  <option value="blocked">Blocked Users</option>
+                  <option value="paused">Paused Accounts</option>
+                </select>
+             </div>
           </div>
           <div className="overflow-y-auto flex-1 space-y-4 pr-4 cursor-pointer">
             {users
@@ -408,6 +440,12 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                 if (statusFilter === 'paused') return u.isPaused && !u.isBlocked && !u.isDeleted;
                 if (statusFilter === 'blocked') return u.isBlocked;
                 if (statusFilter === 'deleted') return u.isDeleted;
+                return true;
+              })
+              .filter(u => {
+                if (roleFilter === 'admin') return u.role === 'admin';
+                if (roleFilter === 'moderator') return u.role === 'moderator';
+                if (roleFilter === 'user') return !u.role || u.role === 'user';
                 return true;
               })
               .filter(u => u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase())).map(user => (
@@ -426,9 +464,23 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                   <p className="text-sm text-slate-500 truncate">{user.email}</p>
                 </div>
                 <div className="shrink-0 ml-auto flex gap-4 md:gap-6 text-sm text-slate-500 items-center">
-                  <div className="hidden md:block text-right">
-                     <p className="font-semibold text-slate-900 dark:text-slate-300">Degree</p>
-                     <p>{user.degree || 'N/A'}</p>
+                  <div className="flex flex-col items-center justify-center min-w-[80px]">
+                     {user.role === 'admin' ? (
+                        <div className="flex flex-col items-center gap-1 text-red-600 dark:text-red-400">
+                          <ShieldCheck className="w-5 h-5" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">Admin</span>
+                        </div>
+                     ) : user.role === 'moderator' ? (
+                        <div className="flex flex-col items-center gap-1 text-blue-600 dark:text-blue-400">
+                          <Shield className="w-5 h-5" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">Mod</span>
+                        </div>
+                     ) : (
+                        <div className="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500">
+                          <UserIcon className="w-5 h-5" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider">User</span>
+                        </div>
+                     )}
                   </div>
                   <div className="text-right font-medium flex flex-col gap-1 items-end">
                     {user.isDeleted ? <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs">Deleted</span> : null}
@@ -634,160 +686,191 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
         </motion.div>
       )}
 
-      {/* User Details Modal/Sidebar */}
+      {/* User Details Modal */}
       <AnimatePresence>
       {selectedUser && (
-        <motion.div 
-          initial={{ x: '100%', opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: '100%', opacity: 0 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-          className="fixed inset-y-0 right-0 w-full md:w-96 bg-white dark:bg-[#09090b] shadow-2xl border-l border-slate-200 dark:border-slate-800 z-50 overflow-y-auto"
-        >
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white">User Details</h2>
-              <button onClick={() => setSelectedUser(null)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setSelectedUser(null)}
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative w-full max-w-2xl bg-white dark:bg-[#09090b] shadow-2xl rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]"
+          >
+            <div className="absolute top-6 right-6 flex items-center gap-2 z-10">
+              <button 
+                onClick={() => setSelectedUser(null)} 
+                className="text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-slate-50 bg-slate-50 dark:bg-[#18181b] p-2 rounded-full transition-colors"
+                id="close-user-modal"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="flex flex-col items-center mb-8">
-              <div className="w-24 h-24 bg-red-100 text-red-600 rounded-full flex items-center justify-center font-bold text-4xl mb-4">
-                {selectedUser.displayName.charAt(0)}
+            <div className="overflow-y-auto p-6 md:p-8 pt-10 md:pt-12">
+              <div className="flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-8 mb-10">
+                <div className="w-32 h-32 bg-red-100 text-red-600 rounded-3xl flex items-center justify-center font-bold text-5xl shadow-inner shrink-0">
+                  {selectedUser.displayName.charAt(0)}
+                </div>
+                <div className="flex-1 text-center md:text-left space-y-4 w-full">
+                  <div>
+                    <div className="flex flex-col md:flex-row md:items-center gap-3 mb-2 justify-center md:justify-start">
+                      <h3 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">{selectedUser.displayName}</h3>
+                      <div className="flex gap-2 justify-center md:justify-start">
+                         {selectedUser.role === 'admin' && <span className="bg-red-600 text-white text-[10px] uppercase font-black px-2 py-1 rounded flex items-center gap-1 shadow-sm shadow-red-200/50"><ShieldCheck className="w-3 h-3"/> Admin</span>}
+                         {selectedUser.role === 'moderator' && <span className="bg-blue-600 text-white text-[10px] uppercase font-black px-2 py-1 rounded flex items-center gap-1 shadow-sm shadow-blue-200/50"><Shield className="w-3 h-3"/> Moderator</span>}
+                         {(!selectedUser.role || selectedUser.role === 'user') && <span className="bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] uppercase font-black px-2 py-1 rounded">Standard User</span>}
+                      </div>
+                    </div>
+                    <p className="text-lg text-slate-500 font-medium">{selectedUser.email}</p>
+                    <p className="text-xs text-slate-400 mt-1 font-mono tracking-tighter">UID: {selectedUser.uid}</p>
+                  </div>
+                </div>
               </div>
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white">{selectedUser.displayName}</h3>
-              <p className="text-sm text-slate-500">{selectedUser.email}</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                 <div className="bg-slate-50 dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-hover hover:shadow-md">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                       <Activity className="w-4 h-4" /> Activity Logs
+                    </h4>
+                    <div className="space-y-3 text-sm text-slate-700 dark:text-slate-300">
+                       <div className="flex justify-between items-center">
+                         <span className="text-slate-500">Joined Platform</span>
+                         <span className="font-bold text-slate-900 dark:text-white">{selectedUser.createdAt ? new Date(selectedUser.createdAt?.toDate?.() || selectedUser.createdAt).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Unknown'}</span>
+                       </div>
+                       <div className="flex justify-between items-center">
+                         <span className="text-slate-500">Last Active</span>
+                         <span className="font-bold text-slate-900 dark:text-white">{selectedUser.lastActiveAt ? new Date(selectedUser.lastActiveAt?.toDate?.() || selectedUser.lastActiveAt).toLocaleString() : 'Not recorded'}</span>
+                       </div>
+                       <div className="h-px bg-slate-200 dark:bg-slate-800 my-2"></div>
+                       <div className="flex justify-between items-center">
+                         <span>Connections Sent</span>
+                         <span className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-lg text-xs font-black">{requests.filter(r => r.senderId === selectedUser.uid).length}</span>
+                       </div>
+                       <div className="flex justify-between items-center">
+                         <span>Connections Recv</span>
+                         <span className="bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-lg text-xs font-black">{requests.filter(r => r.receiverId === selectedUser.uid).length}</span>
+                       </div>
+                       <div className="flex justify-between items-center">
+                         <span>Broad Messages</span>
+                         <span className="bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-lg text-xs font-black">{messages.filter(m => m.senderId === selectedUser.uid).length}</span>
+                       </div>
+                    </div>
+                 </div>
+
+                 <div className="bg-slate-50 dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm transition-hover hover:shadow-md">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                       <Users className="w-4 h-4" /> Academic & Work
+                    </h4>
+                    <div className="space-y-3 text-sm text-slate-700 dark:text-slate-300">
+                       <div className="flex justify-between items-center">
+                         <span className="text-slate-500">Degree/Program</span>
+                         <span className="font-bold text-slate-900 dark:text-white truncate max-w-[150px]">{selectedUser.degree || '-'}</span>
+                       </div>
+                       <div className="flex justify-between items-center">
+                         <span className="text-slate-500">College</span>
+                         <span className="font-bold text-slate-900 dark:text-white truncate max-w-[150px]" title={selectedUser.collegeName}>{selectedUser.collegeName || '-'}</span>
+                       </div>
+                       <div className="flex justify-between items-center">
+                         <span className="text-slate-500">Experience</span>
+                         <span className="font-bold text-slate-900 dark:text-white">{selectedUser.experienceYears ? `${selectedUser.experienceYears} Years` : 'Fresher'}</span>
+                       </div>
+                       <div className="flex justify-between items-center">
+                         <span className="text-slate-500">Current Company</span>
+                         <span className="font-bold text-slate-900 dark:text-white truncate max-w-[150px]">{selectedUser.companyName || '-'}</span>
+                       </div>
+                    </div>
+                    <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                       <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest block mb-2">Technical Skills</span>
+                       <div className="flex flex-wrap gap-1.5">
+                         {selectedUser.skills && selectedUser.skills.length > 0 ? selectedUser.skills.map(skill => (
+                           <span key={skill} className="bg-white dark:bg-[#09090b] text-slate-600 dark:text-slate-400 text-[10px] font-bold px-2 py-1 rounded shadow-sm border border-slate-200 dark:border-slate-800">{skill}</span>
+                         )) : <span className="text-xs text-slate-400 italic">No skills listed</span>}
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest mb-2 border-l-4 border-red-600 pl-3">Administrative Authority</h4>
+                
+                <div className="flex flex-col md:flex-row gap-4 items-start md:items-center bg-slate-100 dark:bg-[#18181b] p-5 rounded-2xl">
+                   <div className="flex-1">
+                      <p className="font-bold text-slate-900 dark:text-white text-sm">Update User Authority</p>
+                      <p className="text-xs text-slate-500">Grant or revoke administrative powers</p>
+                   </div>
+                   <select
+                    value={selectedUser.role || 'user'}
+                    onChange={(e) => handleUpdateUserStatus(selectedUser.uid, 'role', e.target.value as any)}
+                    disabled={!isAdmin}
+                    className="w-full md:w-48 p-3 rounded-xl bg-white dark:bg-[#09090b] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-50 outline-none font-bold text-sm shadow-sm"
+                  >
+                    <option value="user">Standard User</option>
+                    <option value="moderator">Moderator</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <button 
+                    onClick={() => {
+                      setConfirmAction({
+                        uid: selectedUser.uid,
+                        field: 'isPaused',
+                        value: !selectedUser.isPaused as any,
+                        actionName: selectedUser.isPaused ? 'Unpause Account' : 'Pause Account',
+                        message: `Are you sure you want to ${selectedUser.isPaused ? 'unpause' : 'pause'} this account?`
+                      });
+                    }}
+                    className={`flex items-center justify-center gap-2 py-4 rounded-2xl font-bold transition-all shadow-sm ${selectedUser.isPaused ? 'bg-yellow-500 text-white hover:bg-yellow-600' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}`}
+                  >
+                    <PauseCircle className="w-5 h-5" />
+                    {selectedUser.isPaused ? 'Unpause' : 'Pause'}
+                  </button>
+                  
+                  <button 
+                    onClick={() => {
+                      setConfirmAction({
+                        uid: selectedUser.uid,
+                        field: 'isBlocked',
+                        value: !selectedUser.isBlocked as any,
+                        actionName: selectedUser.isBlocked ? 'Unblock Account' : 'Block Account',
+                        message: `Are you sure you want to ${selectedUser.isBlocked ? 'unblock' : 'block'} this account?`
+                      });
+                    }}
+                    className={`flex items-center justify-center gap-2 py-4 rounded-2xl font-bold transition-all shadow-sm ${selectedUser.isBlocked ? 'bg-purple-600 text-white hover:bg-purple-700' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}`}
+                  >
+                    <AlertOctagon className="w-5 h-5" />
+                    {selectedUser.isBlocked ? 'Unblock' : 'Block'}
+                  </button>
+
+                  <button 
+                    disabled={!isAdmin}
+                    onClick={() => {
+                      setConfirmAction({
+                        uid: selectedUser.uid,
+                        field: 'isDeleted',
+                        value: !selectedUser.isDeleted as any,
+                        actionName: selectedUser.isDeleted ? 'Restore Account' : 'Soft Delete Account',
+                        message: `Are you sure you want to ${selectedUser.isDeleted ? 'restore' : 'delete'} this account?`
+                      });
+                    }}
+                    className={`flex items-center justify-center gap-2 py-4 rounded-2xl font-bold transition-all shadow-sm disabled:opacity-30 ${selectedUser.isDeleted ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40'}`}
+                  >
+                    <Trash2 className="w-5 h-5" />
+                    {selectedUser.isDeleted ? 'Restore' : 'Delete'}
+                  </button>
+                </div>
+              </div>
             </div>
-
-            <div className="space-y-4 mb-8">
-               <div className="bg-slate-50 dark:bg-[#18181b] p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Activity Stats</h4>
-                  <div className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
-                     <div className="flex justify-between">
-                       <span>Account Created</span>
-                       <span className="font-semibold text-slate-900 dark:text-white">{selectedUser.createdAt ? new Date(selectedUser.createdAt?.toDate?.() || selectedUser.createdAt).toLocaleDateString() : 'Unknown'}</span>
-                     </div>
-                     <div className="flex justify-between">
-                       <span>Last Sign In</span>
-                       <span className="font-semibold text-slate-900 dark:text-white">{selectedUser.lastActiveAt ? new Date(selectedUser.lastActiveAt?.toDate?.() || selectedUser.lastActiveAt).toLocaleString() : 'Not recorded'}</span>
-                     </div>
-                     <div className="flex justify-between mt-4">
-                       <span>Requests Sent</span>
-                       <span className="font-semibold text-slate-900 dark:text-white">{requests.filter(r => r.senderId === selectedUser.uid).length}</span>
-                     </div>
-                     <div className="flex justify-between">
-                       <span>Requests Received</span>
-                       <span className="font-semibold text-slate-900 dark:text-white">{requests.filter(r => r.receiverId === selectedUser.uid).length}</span>
-                     </div>
-                     <div className="flex justify-between">
-                       <span>Messages Sent</span>
-                       <span className="font-semibold text-slate-900 dark:text-white">{messages.filter(m => m.senderId === selectedUser.uid).length}</span>
-                     </div>
-                  </div>
-               </div>
-
-               <div className="bg-slate-50 dark:bg-[#18181b] p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Profile Info</h4>
-                  <div className="space-y-2 text-sm text-slate-700 dark:text-slate-300">
-                     <div className="flex justify-between">
-                       <span>Program</span>
-                       <span className="font-semibold text-slate-900 dark:text-white">{selectedUser.degree || '-'}</span>
-                     </div>
-                     <div className="flex justify-between">
-                       <span>College</span>
-                       <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[150px]">{selectedUser.collegeName || '-'}</span>
-                     </div>
-                     <div className="flex justify-between">
-                       <span>Experience</span>
-                       <span className="font-semibold text-slate-900 dark:text-white">{selectedUser.experienceYears ? `${selectedUser.experienceYears} Yrs` : 'Fresher'}</span>
-                     </div>
-                     <div className="flex justify-between">
-                       <span>Company</span>
-                       <span className="font-semibold text-slate-900 dark:text-white truncate max-w-[150px]">{selectedUser.companyName || '-'}</span>
-                     </div>
-                     <div className="flex justify-between">
-                       <span>Competitions</span>
-                       <span className="font-semibold text-slate-900 dark:text-white">{selectedUser.competitionCount || 0}</span>
-                     </div>
-                  </div>
-                  <div className="mt-4">
-                     <span className="text-xs text-slate-500 uppercase tracking-widest block mb-2">Skills</span>
-                     <div className="flex flex-wrap gap-1">
-                       {selectedUser.skills && selectedUser.skills.length > 0 ? selectedUser.skills.map(skill => (
-                         <span key={skill} className="bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded">{skill}</span>
-                       )) : <span className="text-sm text-slate-500">No skills listed</span>}
-                     </div>
-                  </div>
-               </div>
-            </div>
-
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Admin Actions</h4>
-              
-              <select
-                value={selectedUser.role || 'user'}
-                onChange={(e) => handleUpdateUserStatus(selectedUser.uid, 'role', e.target.value as any)}
-                disabled={!isAdmin}
-                className="w-full mb-4 p-3 rounded-xl bg-slate-50 dark:bg-[#18181b] border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-50 outline-none"
-              >
-                <option value="user">User</option>
-                <option value="moderator">Moderator</option>
-                <option value="admin">Admin</option>
-              </select>
-
-              <button 
-                onClick={() => {
-                  setConfirmAction({
-                    uid: selectedUser.uid,
-                    field: 'isPaused',
-                    value: !selectedUser.isPaused as any,
-                    actionName: selectedUser.isPaused ? 'Unpause Account' : 'Pause Account',
-                    message: `Are you sure you want to ${selectedUser.isPaused ? 'unpause' : 'pause'} this account?`
-                  });
-                }}
-                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-colors ${selectedUser.isPaused ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}`}
-              >
-                <PauseCircle className="w-4 h-4" />
-                {selectedUser.isPaused ? 'Unpause Account' : 'Pause Account'}
-              </button>
-              
-              <button 
-                onClick={() => {
-                  setConfirmAction({
-                    uid: selectedUser.uid,
-                    field: 'isBlocked',
-                    value: !selectedUser.isBlocked as any,
-                    actionName: selectedUser.isBlocked ? 'Unblock Account' : 'Block Account',
-                    message: `Are you sure you want to ${selectedUser.isBlocked ? 'unblock' : 'block'} this account?`
-                  });
-                }}
-                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-colors ${selectedUser.isBlocked ? 'bg-purple-100 text-purple-700 hover:bg-purple-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}`}
-              >
-                <AlertOctagon className="w-4 h-4" />
-                {selectedUser.isBlocked ? 'Unblock Account' : 'Block Account'}
-              </button>
-
-              {isAdmin && (
-                <button 
-                  onClick={() => {
-                    setConfirmAction({
-                      uid: selectedUser.uid,
-                      field: 'isDeleted',
-                      value: !selectedUser.isDeleted as any,
-                      actionName: selectedUser.isDeleted ? 'Restore Account' : 'Soft Delete Account',
-                      message: `Are you sure you want to ${selectedUser.isDeleted ? 'restore' : 'delete'} this account?`
-                    });
-                  }}
-                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-colors ${selectedUser.isDeleted ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/40'}`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                  {selectedUser.isDeleted ? 'Restore Account' : 'Soft Delete Account'}
-                </button>
-              )}
-            </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        </div>
       )}
 
       {activeTab === 'tickets' && (

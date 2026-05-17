@@ -492,10 +492,9 @@ export const getAllReports = async (): Promise<any[]> => {
 export const updateReportStatus = async (reportId: string, status: 'pending' | 'reviewed') => {
   const path = `reports/${reportId}`;
   try {
-    const { updateDoc } = await import('firebase/firestore');
-    await updateDoc(doc(db, 'reports', reportId), {
+    await setDoc(doc(db, 'reports', reportId), {
       status
-    });
+    }, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
@@ -528,7 +527,7 @@ export const createAnnouncement = async (announcement: Partial<import('../types.
 export const updateAnnouncement = async (announcementId: string, updates: Partial<import('../types.ts').Announcement>) => {
   const path = `announcements/${announcementId}`;
   try {
-    await updateDoc(doc(db, path), updates);
+    await setDoc(doc(db, 'announcements', announcementId), updates, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
@@ -615,8 +614,7 @@ export const getAllSupportTickets = async (): Promise<import('../types.ts').Supp
 export const updateSupportTicketStatus = async (ticketId: string, status: 'open' | 'closed') => {
   const path = `supportTickets/${ticketId}`;
   try {
-    const { updateDoc } = await import('firebase/firestore');
-    await updateDoc(doc(db, 'supportTickets', ticketId), { status });
+    await setDoc(doc(db, 'supportTickets', ticketId), { status }, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
@@ -635,8 +633,7 @@ export const deleteSupportTicket = async (ticketId: string) => {
 export const updateUserRole = async (userId: string, role: string) => {
   const path = `users/${userId}`;
   try {
-    const { updateDoc } = await import('firebase/firestore');
-    await updateDoc(doc(db, 'users', userId), { role });
+    await setDoc(doc(db, 'users', userId), { role }, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
