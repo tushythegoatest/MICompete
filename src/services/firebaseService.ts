@@ -49,8 +49,9 @@ interface FirestoreErrorInfo {
 }
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMessage,
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -60,6 +61,13 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
+  
+  if (errorMessage.includes('Quota limit exceeded') || errorMessage.includes('Quota exceeded')) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('quotaExceeded'));
+    }
+  }
+
   throw new Error(JSON.stringify(errInfo));
 }
 
@@ -79,17 +87,31 @@ export const signInWithGoogle = async () => {
 
 export const logout = () => signOut(auth);
 
+const profileCache = new Map<string, { data: UserProfile | null, timestamp: number }>();
+const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   const path = `users/${uid}`;
+  if (profileCache.has(uid)) {
+    const cached = profileCache.get(uid)!;
+    if (Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+  }
+
   try {
     const docRef = doc(db, 'users', uid);
     const docSnap = await getDoc(docRef);
+    let result: UserProfile | null = null;
     if (docSnap.exists()) {
       const data = docSnap.data() as UserProfile;
-      if (data.isDeleted) return null;
-      return data;
+      if (!data.isDeleted) {
+         result = data;
+      }
     }
-    return null;
+    
+    profileCache.set(uid, { data: result, timestamp: Date.now() });
+    return result;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
     return null;
@@ -575,14 +597,23 @@ export const listenToTargetedCampaigns = (userId: string, callback: (campaigns: 
   }, (error) => handleFirestoreError(error, OperationType.LIST, path));
 };
 
+let globalSettingsCache: { data: import('../types.ts').GlobalSettings | null, timestamp: number } | null = null;
+
 export const getGlobalSettings = async (): Promise<import('../types.ts').GlobalSettings | null> => {
   const path = 'settings/global';
+  if (globalSettingsCache && Date.now() - globalSettingsCache.timestamp < CACHE_TTL) {
+    return globalSettingsCache.data;
+  }
+
   try {
     const docSnap = await getDoc(doc(db, 'settings', 'global'));
+    let result: import('../types.ts').GlobalSettings | null = null;
     if (docSnap.exists()) {
-      return docSnap.data() as import('../types.ts').GlobalSettings;
+      result = docSnap.data() as import('../types.ts').GlobalSettings;
     }
-    return null;
+    
+    globalSettingsCache = { data: result, timestamp: Date.now() };
+    return result;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
     return null;

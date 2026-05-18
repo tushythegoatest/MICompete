@@ -180,6 +180,7 @@ export default function App() {
   const [sentMessages, setSentMessages] = useState<Message[]>([]);
   const [messageRequests, setMessageRequests] = useState<MessageRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
   // Replaced with React Query:
   // const [allTeammates, setAllTeammates] = useState<UserProfile[]>([]);
   // const [lastVisibleDoc, setLastVisibleDoc] = useState<QueryDocumentSnapshot | null>(null);
@@ -381,6 +382,12 @@ export default function App() {
     return () => {
       if (unsubscribeAnnouncements) unsubscribeAnnouncements();
     };
+  }, []);
+
+  useEffect(() => {
+    const handleQuotaExceeded = () => setQuotaExceeded(true);
+    window.addEventListener('quotaExceeded', handleQuotaExceeded);
+    return () => window.removeEventListener('quotaExceeded', handleQuotaExceeded);
   }, []);
 
   useEffect(() => {
@@ -621,9 +628,13 @@ export default function App() {
 
     if (missingUids.length > 0 && currentUser) {
       const fetchMissing = async () => {
-        const newProfiles: Record<string, UserProfile> = {
+        // Prevent concurrent fetches for the same uids or infinite loops if failed
+        const newProfiles: Record<string, UserProfile | null> = {
           ...connectionProfiles,
         };
+        // Pre-mark them to avoid multiple fetch triggers
+        missingUids.forEach(uid => { newProfiles[uid] = null; });
+        
         await Promise.all(
           missingUids.map(async (uid) => {
             try {
@@ -632,7 +643,7 @@ export default function App() {
             } catch (e) {}
           }),
         );
-        setConnectionProfiles(newProfiles);
+        setConnectionProfiles(newProfiles as Record<string, UserProfile>);
       };
       fetchMissing();
     }
@@ -946,6 +957,61 @@ export default function App() {
       setIsSigningOut(false);
     }, 1920);
   };
+
+  if (quotaExceeded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#09090b] px-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="text-center max-w-lg w-full bg-white dark:bg-[#18181b] rounded-3xl p-8 md:p-12 shadow-2xl border border-slate-100 dark:border-slate-800"
+        >
+          <motion.div 
+            animate={{ 
+              scale: [1, 1.05, 1],
+              opacity: [0.8, 1, 0.8] 
+            }}
+            transition={{ 
+              duration: 3, 
+              repeat: Infinity,
+              ease: "easeInOut" 
+            }}
+            className="w-24 h-24 bg-red-50 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-8 relative"
+          >
+            <div className="absolute inset-0 bg-red-100 dark:bg-red-900/30 rounded-full animate-ping opacity-20 duration-1000"></div>
+            <motion.div
+              animate={{ rotate: [0, 720, 900] }}
+              transition={{
+                duration: 5,
+                times: [0, 0.4, 1],
+                repeat: Infinity,
+                ease: "easeInOut"
+              }}
+              style={{ willChange: "transform" }}
+              className="relative z-10 flex items-center justify-center transform-gpu"
+            >
+              <Hourglass className="w-10 h-10 text-red-600 dark:text-red-500" />
+            </motion.div>
+          </motion.div>
+          
+          <h2 className="text-3xl lg:text-4xl font-bold tracking-tight text-slate-900 dark:text-slate-50 mb-3">
+            User Limit Exceeded
+          </h2>
+          <p className="text-lg md:text-xl font-medium text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
+            Please login tomorrow- the daily user limit has exceeded our current capabilities.
+          </p>
+          
+          <div className="bg-red-50 dark:bg-red-900/10 p-6 rounded-2xl border border-red-100 dark:border-red-900/30 text-left">
+            <p className="text-sm dark:text-slate-300 text-slate-700 leading-relaxed font-medium">
+              <span className="font-bold text-red-700 dark:text-red-400 block mb-2">Thanks for supporting MICompete!</span>
+              As a free app, we can only process a limited number of sessions before the user limit needs to refresh. Please login tomorrow to access the app. This issue is being addressed. We sincerely apologize for any inconvenience caused.
+            </p>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

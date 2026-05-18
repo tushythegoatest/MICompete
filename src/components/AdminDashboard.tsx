@@ -302,87 +302,84 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
 
   useEffect(() => {
     if (!isModerator) return;
-
-    const fetchAdminData = async () => {
-      setLoading(true);
+    
+    // Always fetch settings unconditionally at least once, lightweight
+    const fetchSettings = async () => {
       try {
-        // Fetch all users
-        const usersSnapshot = await getDocs(collection(db, 'users'));
-        const usersData = usersSnapshot.docs.map(doc => doc.data() as UserProfile);
-        setUsers(usersData);
-
-        // Fetch all messages (using collectionGroup)
-        const messagesQuery = query(collectionGroup(db, 'messages'), orderBy('createdAt', 'desc'), limit(100));
-        const messagesSnapshot = await getDocs(messagesQuery);
-        const messagesData = messagesSnapshot.docs.map(doc => doc.data() as Message);
-        setMessages(messagesData);
-
-        // Fetch all message requests
-        const requestsSnapshot = await getDocs(collection(db, 'messageRequests'));
-        const requestsData = requestsSnapshot.docs.map(doc => doc.data() as MessageRequest);
-        setRequests(requestsData);
-
-        // Fetch reports
-        const fetchedReports = await getAllReports();
-        setReports(fetchedReports);
-
-        // Fetch tickets
-        const fetchedTickets = await import('../services/firebaseService').then(m => m.getAllSupportTickets());
-        setTickets(fetchedTickets);
-
-        // Fetch announcements
-        const fetchedAnnouncements = await getAllAnnouncements();
-        setAnnouncementHistory(fetchedAnnouncements);
-        
-        // Fetch Audit Logs & Campaigns
-        const fetchedAuditLogs = await import('../services/firebaseService').then(m => m.getAuditLogs());
-        setAuditLogs(fetchedAuditLogs);
-        const fetchedCampaigns = await import('../services/firebaseService').then(m => m.getCampaigns());
-        setCampaigns(fetchedCampaigns);
-
         const settingsSnap = await getDocs(collection(db, 'settings'));
         if (!settingsSnap.empty) {
           const global = settingsSnap.docs.find(d => d.id === 'global');
-          if (global) {
-            setGlobalSettings(prev => ({ ...prev, ...global.data() }));
-          }
+          if (global) setGlobalSettings(prev => ({ ...prev, ...global.data() }));
+        }
+      } catch (e) {}
+    };
+    fetchSettings();
+  }, [isModerator]);
+
+  useEffect(() => {
+    if (!isModerator) return;
+
+    const loadDataForTab = async () => {
+      setLoading(true);
+      try {
+        let currentUserList = users;
+        let currentMessagesList = messages;
+        let currentRequestsList = requests;
+
+        if ((activeTab === 'overview' || activeTab === 'users' || activeTab === 'database') && users.length === 0) {
+          const usersSnapshot = await getDocs(collection(db, 'users'));
+          currentUserList = usersSnapshot.docs.map(doc => doc.data() as UserProfile);
+          setUsers(currentUserList);
+        }
+        if ((activeTab === 'overview' || activeTab === 'messages') && messages.length === 0) {
+           const messagesQuery = query(collectionGroup(db, 'messages'), orderBy('createdAt', 'desc'), limit(100));
+           const msgsSnap = await getDocs(messagesQuery);
+           currentMessagesList = msgsSnap.docs.map(d => d.data() as Message);
+           setMessages(currentMessagesList);
+           const reqsSnap = await getDocs(collection(db, 'messageRequests'));
+           currentRequestsList = reqsSnap.docs.map(d => d.data() as MessageRequest);
+           setRequests(currentRequestsList);
+        }
+        if (activeTab === 'reports' && reports.length === 0) {
+           setReports(await getAllReports());
+        }
+        if (activeTab === 'tickets' && tickets.length === 0) {
+           setTickets(await import('../services/firebaseService').then(m => m.getAllSupportTickets()));
+        }
+        if (activeTab === 'notifications' && announcementHistory.length === 0) {
+           setAnnouncementHistory(await getAllAnnouncements());
+        }
+        if (activeTab === 'audit' && auditLogs.length === 0) {
+           setAuditLogs(await import('../services/firebaseService').then(m => m.getAuditLogs()));
+        }
+        if (activeTab === 'campaigns' && campaigns.length === 0) {
+           setCampaigns(await import('../services/firebaseService').then(m => m.getCampaigns()));
         }
 
-        // Analytics calculation
-        const now = Date.now();
-        const activeUsersCount = usersData.filter(u => u.lastActiveAt && (now - u.lastActiveAt.toMillis()) < 30 * 24 * 60 * 60 * 1000).length;
-        setActiveUsersCount(activeUsersCount);
-
-        // Chart Data Generation (Last 7 Days)
-        const last7Days = Array.from({length: 7}, (_, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() - (6 - i));
-          return `${d.getMonth()+1}/${d.getDate()}`;
-        });
-
-        const dailyData = last7Days.map(dateStr => {
-          // Count users active on this date string
-          const dauCount = usersData.filter(u => u.lastActiveAt && new Date(u.lastActiveAt.toMillis()).toLocaleDateString('en-US', {month:'numeric', day:'numeric'}) === dateStr).length;
-          // Registrations
-          const regCount = usersData.filter(u => u.createdAt && new Date(u.createdAt.toMillis()).toLocaleDateString('en-US', {month:'numeric', day:'numeric'}) === dateStr).length;
-          // Messages sent
-          const msgCount = messagesData.filter(m => m.createdAt && new Date(m.createdAt.toMillis()).toLocaleDateString('en-US', {month:'numeric', day:'numeric'}) === dateStr).length;
-          // Connection requests
-          const reqCount = requestsData.filter(r => r.createdAt && new Date(r.createdAt.toMillis()).toLocaleDateString('en-US', {month:'numeric', day:'numeric'}) === dateStr).length;
-
-          return { name: dateStr, DAU: dauCount, Registrations: regCount, Messages: msgCount, Requests: reqCount };
-        });
-        setChartData(dailyData);
-
+        if (activeTab === 'overview' && currentUserList.length > 0 && currentMessagesList.length > 0) {
+          const now = Date.now();
+          setActiveUsersCount(currentUserList.filter(u => u.lastActiveAt && (now - u.lastActiveAt.toMillis?.()) < 30 * 24 * 60 * 60 * 1000).length);
+          
+          const last7Days = Array.from({length: 7}, (_, i) => {
+            const d = new Date(); d.setDate(d.getDate() - (6 - i));
+            return `${d.getMonth()+1}/${d.getDate()}`;
+          });
+          setChartData(last7Days.map(dateStr => ({
+            name: dateStr,
+            DAU: currentUserList.filter(u => u.lastActiveAt && new Date(u.lastActiveAt.toMillis?.()).toLocaleDateString('en-US', {month:'numeric', day:'numeric'}) === dateStr).length,
+            Registrations: currentUserList.filter(u => u.createdAt && new Date(u.createdAt.toMillis?.()).toLocaleDateString('en-US', {month:'numeric', day:'numeric'}) === dateStr).length,
+            Messages: currentMessagesList.filter(m => m.createdAt && new Date((m.createdAt as any).toMillis?.()).toLocaleDateString('en-US', {month:'numeric', day:'numeric'}) === dateStr).length,
+            Requests: currentRequestsList.filter(r => r.createdAt && new Date((r.createdAt as any).toMillis?.()).toLocaleDateString('en-US', {month:'numeric', day:'numeric'}) === dateStr).length
+          })));
+        }
       } catch (error) {
         console.error("Error fetching admin data", error);
       } finally {
         setLoading(false);
       }
     };
-
-    fetchAdminData();
-  }, [isModerator]);
+    loadDataForTab();
+  }, [isModerator, activeTab]);
 
   const handleUpdateUserStatus = async (uid: string, field: string, value: any) => {
     try {
