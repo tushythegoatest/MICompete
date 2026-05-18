@@ -33,7 +33,9 @@ service cloud.firestore {
     }
 
     function isEmailVerified() {
-      return request.auth.token.email_verified == true;
+      // Lenient for Google users as requested by common issues with mobile/iframe providers
+      return request.auth.token.email_verified == true || 
+             (request.auth.token.firebase.sign_in_provider == 'google.com');
     }
 
     function incoming() {
@@ -52,29 +54,15 @@ service cloud.firestore {
       let requiredFields = ['uid', 'displayName', 'email', 'createdAt', 'degree', 'collegeName', 'experienceYears', 'competitionCount', 'bio', 'skills', 'isDeleted', 'isPaused'];
       return data.keys().hasAll(requiredFields)
         && data.uid == request.auth.uid
-        && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com')
-        && data.displayName is string && data.displayName.size() <= 100 && data.displayName.size() >= 0
-        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 2000))
-        && (!('gender' in data) || (data.gender is string && data.gender.size() <= 50))
-        && (!('darkMode' in data) || (data.darkMode is bool))
-        && data.bio is string && data.bio.size() <= 2000
+        && isEmailVerified()
+        && data.displayName is string && data.displayName.size() <= 100
+        && data.bio is string && data.bio.size() <= 2500
+        && data.email is string && data.email.size() <= 200
         && data.degree is string && data.degree.size() <= 1000
-        && (!('ugDegree' in data) || (data.ugDegree is string && data.ugDegree.size() <= 1000))
         && data.collegeName is string && data.collegeName.size() <= 1000
-        && data.experienceYears is number && data.experienceYears >= 0
-        && (!('isFresher' in data) || (data.isFresher is bool))
-        && (!('companyName' in data) || (data.companyName is string && data.companyName.size() <= 1000))
-        && (!('jobRole' in data) || (data.jobRole is string && data.jobRole.size() <= 1000))
-        && (!('role' in data) || (data.role is string && data.role.size() <= 50))
-        && (!('workExperiences' in data) || (data.workExperiences is list && data.workExperiences.size() <= 10))
-        && (!('isPaused' in data) || (data.isPaused is bool))
-        && (!('isDeleted' in data) || (data.isDeleted is bool))
-        && (!('isBlocked' in data) || (data.isBlocked is bool))
-        && (!('dismissedAnnouncements' in data) || (data.dismissedAnnouncements is list && data.dismissedAnnouncements.size() <= 100))
-        && (!('dismissedCampaigns' in data) || (data.dismissedCampaigns is list && data.dismissedCampaigns.size() <= 100))
-        && (!('lastActiveAt' in data) || (data.lastActiveAt is timestamp))
-        && data.competitionCount is number && data.competitionCount >= 0
-        && data.skills is list && data.skills.size() <= 50
+        && data.experienceYears is number
+        && data.competitionCount is number
+        && data.skills is list && data.skills.size() <= 100
         && data.createdAt == request.time;
     }
 
@@ -102,19 +90,25 @@ service cloud.firestore {
     // Collection: Users
     match /users/{userId} {
       allow get: if isSignedIn() && isValidId(userId);
-      allow list: if isSignedIn(); // Users need to find each other to partner up.
+      allow list: if isSignedIn();
       
-      allow create: if isOwner(userId) && isValidUserProfile(incoming()) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
       
-      allow update: if (isOwner(userId) || isModerator())
-        && isValidId(userId)
-        && incoming().uid == existing().uid
-        && incoming().email == existing().email
-        && (
-          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['role', 'jobRole', 'isDeleted', 'isPaused', 'isBlocked', 'displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'isFresher', 'companyName', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'lastActiveAt', 'dismissedAnnouncements', 'dismissedCampaigns', 'createdAt'])) ||
-          (isModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['jobRole', 'isPaused', 'isBlocked', 'displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'isFresher', 'companyName', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'lastActiveAt', 'dismissedAnnouncements', 'dismissedCampaigns', 'createdAt'])) ||
-          (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['jobRole', 'displayName', 'photoURL', 'gender', 'darkMode', 'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 'isFresher', 'companyName', 'workExperiences', 'competitionCount', 'bio', 'uid', 'email', 'isPaused', 'isDeleted', 'lastActiveAt', 'dismissedAnnouncements', 'dismissedCampaigns', 'createdAt']))
-        );
+      allow update: if isValidId(userId) && (
+        isAdmin() || 
+        isModerator() || 
+        (isOwner(userId) && 
+         incoming().uid == existing().uid && 
+         incoming().email == existing().email &&
+         incoming().diff(existing()).affectedKeys().hasOnly([
+           'jobRole', 'displayName', 'photoURL', 'gender', 'darkMode', 
+           'skills', 'degree', 'ugDegree', 'collegeName', 'experienceYears', 
+           'isFresher', 'companyName', 'workExperiences', 'competitionCount', 
+           'bio', 'uid', 'email', 'isPaused', 'isDeleted', 'lastActiveAt', 
+           'dismissedAnnouncements', 'dismissedCampaigns', 'createdAt'
+         ])
+        )
+      );
     }
 
     // Collection: Chats and Messages
