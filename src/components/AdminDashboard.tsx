@@ -18,6 +18,7 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'deleted' | 'blocked' | 'paused'>('all');
   const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'moderator' | 'user'>('all');
+  const [sortOrder, setSortOrder] = useState<'alphabetical' | 'alphabetical-desc' | 'newest' | 'oldest' | 'recent-login' | 'oldest-login'>('newest');
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'messages' | 'reports' | 'tickets' | 'settings' | 'notifications' | 'database' | 'audit' | 'campaigns'>('overview');
   
   const [databaseSearchTerm, setDatabaseSearchTerm] = useState('');
@@ -1334,6 +1335,21 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                   <option value="paused">Paused Accounts</option>
                 </select>
              </div>
+             <div className="w-full md:w-56">
+                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block ml-1">Sort By</label>
+                <select
+                   value={sortOrder}
+                   onChange={(e) => setSortOrder(e.target.value as any)}
+                   className="w-full bg-slate-50 dark:bg-[#27272a] border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-3 focus:ring-2 focus:ring-red-600 text-slate-900 dark:text-slate-50 transition-all outline-none cursor-pointer font-medium"
+                >
+                  <option value="newest">Most Recent Created</option>
+                  <option value="oldest">Least Recent Created</option>
+                  <option value="recent-login">Most Recent Login</option>
+                  <option value="oldest-login">Least Recent Login</option>
+                  <option value="alphabetical">Alphabetical (A-Z)</option>
+                  <option value="alphabetical-desc">Alphabetical (Z-A)</option>
+                </select>
+             </div>
           </div>
           <div className="overflow-y-auto flex-1 space-y-4 pr-4 cursor-pointer">
             {users
@@ -1350,7 +1366,38 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
                 if (roleFilter === 'user') return !u.role || u.role === 'user';
                 return true;
               })
-              .filter(u => u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase())).map(user => (
+              .filter(u => u.displayName.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase()))
+              .sort((a, b) => {
+                const nameA = (a.displayName || '').toLowerCase();
+                const nameB = (b.displayName || '').toLowerCase();
+                
+                if (sortOrder === 'alphabetical') {
+                  return nameA.localeCompare(nameB);
+                }
+                if (sortOrder === 'alphabetical-desc') {
+                  return nameB.localeCompare(nameA);
+                }
+                
+                const getDate = (dateObj: any) => {
+                  if (!dateObj) return 0;
+                  return dateObj.seconds ? dateObj.seconds * 1000 : new Date(dateObj).getTime();
+                };
+
+                if (sortOrder === 'newest') {
+                  return getDate(b.createdAt) - getDate(a.createdAt);
+                }
+                if (sortOrder === 'oldest') {
+                  return getDate(a.createdAt) - getDate(b.createdAt);
+                }
+                if (sortOrder === 'recent-login') {
+                  return getDate(b.lastActiveAt) - getDate(a.lastActiveAt);
+                }
+                if (sortOrder === 'oldest-login') {
+                  return getDate(a.lastActiveAt) - getDate(b.lastActiveAt);
+                }
+                return 0;
+              })
+              .map(user => (
               <motion.div 
                 key={user.uid} 
                 initial={{ opacity: 0, x: -10 }}
