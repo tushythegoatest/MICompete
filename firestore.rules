@@ -116,9 +116,10 @@ service cloud.firestore {
       allow get: if isSignedIn() && isValidId(chatId);
       
       match /messages/{messageId} {
+        // FIX: Replaced chatId.matches regex logic with request.auth.uid in chatId.split('_') to eliminate NoSQL ID traversal vulnerabilities.
         allow list: if isSignedIn() 
           && isValidId(chatId)
-          && (chatId.matches('.*' + request.auth.uid + '.*') || isAdmin());
+          && (request.auth.uid in chatId.split('_') || isAdmin());
           
         allow get: if isSignedIn() 
           && isValidId(chatId)
@@ -137,7 +138,7 @@ service cloud.firestore {
           && incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
           && incoming().isRead == true;
           
-        allow delete: if isSignedIn() && isValidId(chatId) && (chatId.matches('.*' + request.auth.uid + '.*') || isAdmin());
+        allow delete: if isSignedIn() && isValidId(chatId) && (request.auth.uid in chatId.split('_') || isAdmin());
       }
     }
 
@@ -205,8 +206,9 @@ service cloud.firestore {
 
     // Collection: Typing
     match /typing/{chatId} {
-      allow read: if isSignedIn() && (chatId.matches('.*' + request.auth.uid + '.*') || isAdmin());
-      allow write: if isSignedIn() && (chatId.matches('.*' + request.auth.uid + '.*') || isAdmin());
+      // FIX: Changed from `.matches` to strict `.split('_')` check to prevent User ID collision vulnerabilities (Injection/Authorization risk)
+      allow read: if isSignedIn() && (request.auth.uid in chatId.split('_') || isAdmin());
+      allow write: if isSignedIn() && (request.auth.uid in chatId.split('_') || isAdmin());
     }
 
     // Collection: Support Tickets

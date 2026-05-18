@@ -1,6 +1,9 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
+import helmet from "helmet";
+import cors from "cors";
+import compression from "compression";
 
 dotenv.config();
 
@@ -8,46 +11,22 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // FIX: Added Helmet, CORS, and Compression middleware for production security and scalability.
+  // Add security headers (relaxed CSP for Vite/React dev and images)
+  app.use(helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }));
+  
+  // Enable CORS
+  app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+
+  // Compress responses
+  app.use(compression());
+
   app.use(express.json());
 
   // API routes go here FIRST
-  app.post("/api/ai/enhance-bio", async (req, res) => {
-    try {
-      const { bio, skills, degree } = req.body;
-      const { GoogleGenAI } = await import("@google/genai");
-      
-      const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY || "",
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
-
-      const prompt = `You are a professional career coach. Enhance the following bio for a B-school student competition platform.
-      Original Bio: ${bio}
-      Skills: ${skills}
-      Degree: ${degree}
-      
-      Requirements:
-      - Make it sound professional, ambitious, and collaborative.
-      - Keep it under 300 characters.
-      - Highlight the synergy between their skills and degree.
-      - Output ONLY the enhanced bio text.`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-      });
-      const enhancedBio = response.text?.trim() || "";
-      
-      res.json({ enhancedBio });
-    } catch (error) {
-      console.error("AI Error:", error);
-      res.status(500).json({ error: "Failed to enhance bio" });
-    }
-  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

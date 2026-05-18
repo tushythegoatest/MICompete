@@ -29,7 +29,6 @@ import {
   UserPlus,
   UserCheck,
   Hourglass,
-  Sparkles,
 } from "lucide-react";
 import {
   View,
@@ -92,12 +91,13 @@ export const formatNameForPrivacy = (
   return parts[0];
 };
 
-export const formatTimeAgo = (date: any) => {
+// FIX: Replaced `any` with strict typing (`Date | { toMillis: () => number } | string | number`) and resilient object parsing to avoid runtime exceptions on invalid Date inputs.
+export const formatTimeAgo = (date: Date | { toMillis: () => number } | string | number) => {
   if (!date) return "";
   const millis =
-    typeof date.toMillis === "function"
+    typeof date === "object" && "toMillis" in date && typeof date.toMillis === "function"
       ? date.toMillis()
-      : new Date(date).getTime();
+      : new Date(date as any).getTime();
   if (!millis || isNaN(millis)) return "";
   const seconds = Math.floor((new Date().getTime() - millis) / 1000);
   if (seconds < 60) return "just now";
@@ -109,12 +109,12 @@ export const formatTimeAgo = (date: any) => {
   return `${days}d ago`;
 };
 
-export const formatMessageTime = (date: any) => {
+export const formatMessageTime = (date: Date | { toMillis: () => number } | string | number) => {
   if (!date) return "";
   const millis =
-    typeof date.toMillis === "function"
+    typeof date === "object" && "toMillis" in date && typeof date.toMillis === "function"
       ? date.toMillis()
-      : new Date(date).getTime();
+      : new Date(date as any).getTime();
   if (!millis || isNaN(millis)) return "";
 
   const d = new Date(millis);
@@ -296,6 +296,7 @@ export default function App() {
 
   // Profile Form State
   const [profileForm, setProfileForm] = useState(DEFAULT_PROFILE_FORM);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const [showProfileSavedSplash, setShowProfileSavedSplash] = useState(false);
   const [profileError, setProfileError] = useState("");
@@ -321,36 +322,6 @@ export default function App() {
   const [isSubmittingSupport, setIsSubmittingSupport] = useState(false);
 
   const [showMaintenancePopup, setShowMaintenancePopup] = useState(false);
-  const [isEnhancingBio, setIsEnhancingBio] = useState(false);
-
-  const handleEnhanceBio = async () => {
-    if (!profileForm.bio.trim()) {
-      setProfileError("Please enter some text in the bio first.");
-      return;
-    }
-    setIsEnhancingBio(true);
-    try {
-      const res = await fetch("/api/ai/enhance-bio", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bio: profileForm.bio,
-          skills: profileForm.skills,
-          degree: profileForm.degree,
-        }),
-      });
-      const data = await res.json();
-      if (data.enhancedBio) {
-        setProfileForm((prev) => ({ ...prev, bio: data.enhancedBio }));
-        showToast("Bio enhanced by AI!");
-      }
-    } catch (e) {
-      console.error("AI Error:", e);
-      showToast("AI enhancement failed.");
-    } finally {
-      setIsEnhancingBio(false);
-    }
-  };
 
   useEffect(() => {
     const isModalOpen = !!(
@@ -634,10 +605,8 @@ export default function App() {
     receivedMessages.forEach((m) => uids.add(m.senderId));
     sentMessages.forEach((m) => uids.add(m.receiverId));
     messageRequests.forEach((r) => {
-      if (r.status === "accepted") {
-        uids.add(r.senderId);
-        uids.add(r.receiverId);
-      }
+      uids.add(r.senderId);
+      uids.add(r.receiverId);
     });
     uids.delete(currentUser?.uid || "");
     return Array.from(uids);
@@ -698,9 +667,11 @@ export default function App() {
   };
 
   const handleSaveProfile = async () => {
-    if (!currentUser) return;
+    // FIX: Added `isSavingProfile` check to prevent race conditions and multiple rapid network requests.
+    if (!currentUser || isSavingProfile) return;
 
     setProfileError("");
+    setIsSavingProfile(true);
     if (
       !profileForm.displayName.trim() ||
       !profileForm.degree.trim() ||
@@ -711,6 +682,7 @@ export default function App() {
       !profileForm.bio.trim()
     ) {
       setProfileError("Please fill all mandatory fields.");
+      setIsSavingProfile(false);
       return;
     }
 
@@ -724,6 +696,7 @@ export default function App() {
       setProfileError(
         "Please fill both Company and Role for all work experiences, or remove empty ones.",
       );
+      setIsSavingProfile(false);
       return;
     }
 
@@ -786,6 +759,7 @@ export default function App() {
           setProfileError(
             `Registration is currently limited to ${globalSettings.maxUsers} users. Please try again later.`,
           );
+          setIsSavingProfile(false);
           return;
         }
       }
@@ -799,6 +773,8 @@ export default function App() {
     } catch (err: any) {
       console.error("Profile save error:", err);
       setProfileError(`Failed to save: ${err.message || "Check console"}`);
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -1910,7 +1886,7 @@ export default function App() {
                                   r.status === "pending",
                               )
                               .map((req) => {
-                                const sender = allTeammates.find(
+                                const sender = sidebarTeammates.find(
                                   (tm) => tm.uid === req.senderId,
                                 );
                                 if (!sender) return null;
@@ -1995,7 +1971,7 @@ export default function App() {
                             messageRequests
                               .filter((r) => r.senderId === currentUser?.uid)
                               .map((req) => {
-                                const receiver = allTeammates.find(
+                                const receiver = sidebarTeammates.find(
                                   (tm) => tm.uid === req.receiverId,
                                 );
                                 if (!receiver) return null;
@@ -2546,19 +2522,6 @@ export default function App() {
                           <label className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">
                             Bio <span className="text-red-500">*</span>
                           </label>
-                          <button
-                            type="button"
-                            onClick={handleEnhanceBio}
-                            disabled={isEnhancingBio}
-                            className="text-[10px] font-bold text-red-600 hover:text-red-700 disabled:opacity-50 flex items-center gap-1 uppercase tracking-wider"
-                          >
-                            {isEnhancingBio ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <Sparkles className="w-3 h-3" />
-                            )}
-                            Enhance with AI
-                          </button>
                         </div>
                         <textarea
                           value={profileForm.bio || ""}
@@ -2606,9 +2569,10 @@ export default function App() {
                       )}
                       <button
                         onClick={handleSaveProfile}
-                        className="flex-1 bg-red-600 text-white py-4 rounded-xl font-bold tracking-widest text-xs hover:bg-red-500 transition-colors uppercase"
+                        disabled={isSavingProfile}
+                        className="flex-1 bg-red-600 text-white py-4 rounded-xl font-bold tracking-widest text-xs hover:bg-red-500 transition-colors uppercase disabled:opacity-50"
                       >
-                        Save Profile
+                        {isSavingProfile ? "Saving..." : "Save Profile"}
                       </button>
                     </div>
                   </>
