@@ -622,7 +622,7 @@ export default function App() {
   useEffect(() => {
     const missingUids = activeChatUserIds.filter(
       (uid) =>
-        !connectionProfiles[uid] &&
+        connectionProfiles[uid] === undefined &&
         !allTeammates.some((t: UserProfile) => t.uid === uid),
     );
 
@@ -652,9 +652,9 @@ export default function App() {
   const sidebarTeammates = React.useMemo(() => {
     const teammateMap = new Map<string, UserProfile>();
     allTeammates.forEach((t: UserProfile) => teammateMap.set(t.uid, t));
-    Object.values(connectionProfiles).forEach((p: UserProfile) =>
-      teammateMap.set(p.uid, p),
-    );
+    Object.values(connectionProfiles).forEach((p: UserProfile | null) => {
+      if (p) teammateMap.set(p.uid, p);
+    });
     return Array.from(teammateMap.values());
   }, [allTeammates, connectionProfiles]);
 
@@ -958,7 +958,7 @@ export default function App() {
     }, 1920);
   };
 
-  if (quotaExceeded) {
+  if (quotaExceeded && !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#09090b] px-4">
         <motion.div 
