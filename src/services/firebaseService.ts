@@ -159,7 +159,7 @@ export const saveUserProfile = async (profile: Partial<UserProfile> & { uid: str
 export const getAllUsers = async (): Promise<UserProfile[]> => {
   const path = 'users';
   try {
-    const q = query(collection(db, 'users'));
+    const q = query(collection(db, 'users'), limit(500));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => doc.data() as UserProfile).filter(user => !user.isPaused && !user.isDeleted);
   } catch (error) {
@@ -324,14 +324,15 @@ export const listenToMessages = (senderId: string, receiverId: string, callback:
   const path = `chats/${chatId}/messages`;
   const q = query(
     collection(db, 'chats', chatId, 'messages'),
-    orderBy('createdAt', 'asc')
+    orderBy('createdAt', 'desc'),
+    limit(20)
   );
 
   return onSnapshot(q, (snapshot) => {
     const messages = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    } as Message));
+    } as Message)).reverse();
     callback(messages);
   }, (error) => {
     handleFirestoreError(error, OperationType.GET, path);
@@ -339,28 +340,14 @@ export const listenToMessages = (senderId: string, receiverId: string, callback:
 };
 
 export const setTypingStatus = async (senderId: string, receiverId: string, isTyping: boolean) => {
-  const chatId = [senderId, receiverId].sort().join('_');
-  const path = `typing/${chatId}`;
-  try {
-    await setDoc(doc(db, 'typing', chatId), {
-      [senderId]: isTyping,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-  } catch (error) {
-    console.error("Error setting typing status:", error);
-  }
+  // Disabled to save quota
+  return Promise.resolve();
 };
 
 export const listenToTypingStatus = (senderId: string, receiverId: string, callback: (isTyping: boolean) => void) => {
-  const chatId = [senderId, receiverId].sort().join('_');
-  return onSnapshot(doc(db, 'typing', chatId), (docSnap) => {
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      callback(!!data[receiverId]); // Check if the receiver of our messages is typing
-    } else {
-      callback(false);
-    }
-  });
+  // Disabled to save quota
+  callback(false);
+  return () => {};
 };
 
 export const endorseSkill = async (endorserId: string, endorseeId: string, skill: string) => {
@@ -505,7 +492,7 @@ export const reportUser = async (reporterId: string, reportedId: string, reason:
 export const getAllReports = async (): Promise<any[]> => {
   const path = 'reports';
   try {
-    const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'reports'), orderBy('createdAt', 'desc'), limit(100));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   } catch (error) {
@@ -561,7 +548,7 @@ export const updateAnnouncement = async (announcementId: string, updates: Partia
 export const getAllAnnouncements = async () => {
   const path = 'announcements';
   try {
-    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'), limit(100));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as import('../types.ts').Announcement));
   } catch (error) {
@@ -581,7 +568,7 @@ export const deleteAnnouncement = async (announcementId: string) => {
 
 export const listenToAnnouncements = (callback: (announcements: import('../types.ts').Announcement[]) => void) => {
   const path = 'announcements';
-  const q = query(collection(db, path), where('active', '==', true), orderBy('createdAt', 'desc'));
+  const q = query(collection(db, path), where('active', '==', true), orderBy('createdAt', 'desc'), limit(10));
   
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as import('../types.ts').Announcement)));
@@ -590,7 +577,7 @@ export const listenToAnnouncements = (callback: (announcements: import('../types
 
 export const listenToTargetedCampaigns = (userId: string, callback: (campaigns: import('../types.ts').Campaign[]) => void) => {
   const path = 'campaigns';
-  const q = query(collection(db, path), where('status', '==', 'active'), where('targetUserIds', 'array-contains', userId));
+  const q = query(collection(db, path), where('status', '==', 'active'), where('targetUserIds', 'array-contains', userId), limit(10));
   
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as import('../types.ts').Campaign)));
@@ -645,7 +632,7 @@ export const createSupportTicket = async (ticket: Partial<import('../types.ts').
 export const getAllSupportTickets = async (): Promise<import('../types.ts').SupportTicket[]> => {
   const path = 'supportTickets';
   try {
-    const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, path), orderBy('createdAt', 'desc'), limit(100));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as import('../types.ts').SupportTicket));
   } catch (error) {
@@ -724,8 +711,8 @@ export const createCampaign = async (campaign: Partial<import('../types.ts').Cam
 
 export const getCampaigns = async (): Promise<import('../types.ts').Campaign[]> => {
   try {
-    const { getDocs, collection, query, orderBy } = await import('firebase/firestore');
-    const q = query(collection(db, 'campaigns'), orderBy('createdAt', 'desc'));
+    const { getDocs, collection, query, orderBy, limit } = await import('firebase/firestore');
+    const q = query(collection(db, 'campaigns'), orderBy('createdAt', 'desc'), limit(100));
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() } as import('../types.ts').Campaign));
   } catch (error) {

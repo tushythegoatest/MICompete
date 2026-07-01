@@ -327,7 +327,8 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
         let currentRequestsList = requests;
 
         if ((activeTab === 'overview' || activeTab === 'users' || activeTab === 'database') && users.length === 0) {
-          const usersSnapshot = await getDocs(collection(db, 'users'));
+          const usersQuery = query(collection(db, 'users'), limit(1000));
+          const usersSnapshot = await getDocs(usersQuery);
           currentUserList = usersSnapshot.docs.map(doc => doc.data() as UserProfile);
           setUsers(currentUserList);
         }
@@ -336,7 +337,8 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
            const msgsSnap = await getDocs(messagesQuery);
            currentMessagesList = msgsSnap.docs.map(d => d.data() as Message);
            setMessages(currentMessagesList);
-           const reqsSnap = await getDocs(collection(db, 'messageRequests'));
+           const reqsQuery = query(collection(db, 'messageRequests'), limit(500));
+           const reqsSnap = await getDocs(reqsQuery);
            currentRequestsList = reqsSnap.docs.map(d => d.data() as MessageRequest);
            setRequests(currentRequestsList);
         }
