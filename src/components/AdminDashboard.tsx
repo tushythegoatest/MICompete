@@ -702,6 +702,45 @@ export default function AdminDashboard({ currentUser, currentUserProfile, showTo
               </div>
             </div>
           </div>
+          
+          <div className="bg-white dark:bg-[#18181b] p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mt-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">Firebase Free Tier Quota Usage (Daily)</h3>
+              <span className="text-sm font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">Estimated</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                { label: 'Document Reads', value: Math.min(users.length * 15 + messages.length * 3 + requests.length * 2, 50000), limit: 50000, color: 'bg-blue-500', icon: <Activity className="w-5 h-5 text-blue-500" /> },
+                { label: 'Document Writes', value: Math.min(users.length * 2 + messages.length, 20000), limit: 20000, color: 'bg-amber-500', icon: <Pencil className="w-5 h-5 text-amber-500" /> },
+                { label: 'Document Deletes', value: Math.min(Math.floor(messages.length * 0.1), 20000), limit: 20000, color: 'bg-red-500', icon: <Trash2 className="w-5 h-5 text-red-500" /> }
+              ].map((quota, idx) => {
+                const widthPct = Math.max((quota.value / quota.limit) * 100, 1);
+                return (
+                  <div key={idx} className="relative p-4 border border-slate-200 dark:border-slate-700/50 rounded-xl bg-slate-50 dark:bg-black/20">
+                    <div className="flex items-center gap-2 mb-4">
+                      {quota.icon}
+                      <span className="font-bold text-slate-700 dark:text-slate-300">{quota.label}</span>
+                    </div>
+                    <div className="flex justify-between text-sm mb-2">
+                      <span className="text-slate-500 font-medium">Usage</span>
+                      <span className="text-slate-900 dark:text-white font-bold">{quota.value.toLocaleString()} / {quota.limit.toLocaleString()}</span>
+                    </div>
+                    <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                      <motion.div 
+                        className={`h-full ${quota.color}`} 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${widthPct}%` }}
+                        transition={{ duration: 1, delay: idx * 0.1 }}
+                      />
+                    </div>
+                    <div className="mt-2 text-right">
+                       <span className="text-xs font-bold text-slate-400">{widthPct.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
